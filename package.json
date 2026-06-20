@@ -1,0 +1,17 @@
+{
+  "name": "ext267",
+  "version": "1.0.6",
+  "description": "A multipurpose, extensible browser toolkit. Capture download requests and generate CLI commands for curl, wget, and aria2c.",
+  "scripts": {
+    "lint": "web-ext lint",
+    "dev": "web-ext run",
+    "build": "web-ext build --overwrite-dest",
+    "version": "node version-sync.js && git add manifest.json",
+    "package:xpi": "node build-package.js"
+  },
+  "author": "dat <dat267@outlook.com>",
+  "license": "MPL-2.0",
+  "devDependencies": {
+    "web-ext": "*"
+  }
+}

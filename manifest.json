@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "ext267",
+  "version": "1.0.6",
+  "description": "A multipurpose, extensible browser toolkit. Capture download requests and generate CLI commands for curl, wget, and aria2c.",
+  "icons": {
+    "48": "icons/ext267.svg",
+    "96": "icons/ext267.svg",
+    "128": "icons/ext267.svg"
+  },
+  "permissions": [
+    "webRequest",
+    "storage",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "plugins/cliget.js",
+      "plugins/placeholder.js"
+    ]
+  },
+  "action": {
+    "default_title": "ext267",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/ext267.svg",
+      "32": "icons/ext267.svg"
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ext267@dat267.github.io",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  }
+}
