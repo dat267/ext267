@@ -19,8 +19,7 @@
   ],
   "background": {
     "scripts": [
-      "plugins/cliget.js",
-      "plugins/placeholder.js"
+      "plugins/cliget.js"
     ]
   },
   "action": {

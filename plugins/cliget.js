@@ -251,9 +251,13 @@ function generate(url, method, headers, payload, filename, options) {
 }
 
 // ----------------------------------------------------
-// Isolated Background Execution (Service Worker context)
+// Isolated Background Execution (Service Worker / Event Page context)
+// Chrome MV3: typeof window === "undefined" (pure service worker)
+// Firefox MV3: background.scripts loads at _generated_background_page.html
 // ----------------------------------------------------
-if (typeof window === "undefined") {
+const _isBackground = typeof window === "undefined" ||
+  (typeof location !== "undefined" && location.pathname !== "/popup.html");
+if (_isBackground) {
   const MAX_ITEMS = 10;
   const currentRequests = new Map();
 
@@ -518,7 +522,62 @@ globalThis.registerPlugin({
   ],
   generate: generate,
   render: async function (panel, context) {
-    const { ext, options, currentDownloads, selectedDownloadId, fileSizeToText, refresh, setSelectedDownloadId } = context;
+    const { refresh } = context;
+
+    // Clear the badge whenever this plugin's panel is opened
+    if (extAction && extAction.setBadgeText) {
+      extAction.setBadgeText({ text: "" });
+    }
+
+    // Local fileSizeToText helper
+    const fileSizeToText = (size) => {
+      let unit = "B";
+      if (size >= 1024) {
+        size /= 1024;
+        unit = "KB";
+        if (size >= 1024) {
+          size /= 1024;
+          unit = "MB";
+          if (size >= 1024) {
+            size /= 1024;
+            unit = "GB";
+          }
+        }
+      }
+      return `${size.toFixed(1)} ${unit}`;
+    };
+
+    // Load state and download list
+    const list = await ext.runtime.sendMessage(["cliget:getDownloadList"]);
+    const currentDownloads = list || [];
+
+    const stored = await ext.storage.local.get(["selectedDownloadId"]);
+    let selectedDownloadId = stored.selectedDownloadId;
+
+    if (currentDownloads.length > 0) {
+      if (!selectedDownloadId || !currentDownloads.some(d => d.id === selectedDownloadId)) {
+        selectedDownloadId = currentDownloads[currentDownloads.length - 1].id;
+        await ext.storage.local.set({ selectedDownloadId });
+      }
+    } else {
+      selectedDownloadId = "";
+    }
+
+    if (currentDownloads.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "No downloads intercepted in this session.";
+      panel.appendChild(empty);
+      return;
+    }
+
+    // Merge options
+    const defaults = Object.assign(
+      { doubleQuotes: false, excludeHeaders: "Accept-Encoding Connection" },
+      this.defaultOptions || {}
+    );
+    const storedOptions = await ext.storage.local.get();
+    const options = Object.assign({}, defaults, storedOptions);
 
     const request = currentDownloads.find(r => r.id === selectedDownloadId);
     const activeOptions = Object.assign({}, options, { command: "cliget" });
@@ -534,28 +593,20 @@ globalThis.registerPlugin({
     pickerLabel.appendChild(document.createTextNode("Intercepted Download:"));
 
     const pickerSelect = document.createElement("select");
-    if (currentDownloads.length === 0) {
+    for (let i = currentDownloads.length - 1; i >= 0; --i) {
+      const req = currentDownloads[i];
       const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "(No intercepted downloads)";
-      opt.disabled = true;
-      pickerSelect.appendChild(opt);
-    } else {
-      for (let i = currentDownloads.length - 1; i >= 0; --i) {
-        const req = currentDownloads[i];
-        const opt = document.createElement("option");
-        opt.value = req.id;
-        let sizeText = req.size ? ` (${fileSizeToText(req.size)})` : "";
-        opt.textContent = `${req.filename || "Untitled"}${sizeText}`;
-        if (req.id === selectedDownloadId) {
-          opt.selected = true;
-        }
-        pickerSelect.appendChild(opt);
+      opt.value = req.id;
+      let sizeText = req.size ? ` (${fileSizeToText(req.size)})` : "";
+      opt.textContent = `${req.filename || "Untitled"}${sizeText}`;
+      if (req.id === selectedDownloadId) {
+        opt.selected = true;
       }
+      pickerSelect.appendChild(opt);
     }
 
     pickerSelect.onchange = async (e) => {
-      await setSelectedDownloadId(e.target.value);
+      await ext.storage.local.set({ selectedDownloadId: e.target.value });
       refresh();
     };
 
@@ -566,16 +617,12 @@ globalThis.registerPlugin({
     clearBtn.className = "btn btn-red btn-full";
     clearBtn.style.marginTop = "8px";
     clearBtn.textContent = "Clear Intercept Session";
-    if (currentDownloads.length === 0) {
-      clearBtn.disabled = true;
-    } else {
-      clearBtn.onclick = () => {
-        ext.runtime.sendMessage(["cliget:clear"]).then(async () => {
-          await setSelectedDownloadId("");
-          refresh();
-        });
-      };
-    }
+    clearBtn.onclick = () => {
+      ext.runtime.sendMessage(["cliget:clear"]).then(async () => {
+        await ext.storage.local.remove("selectedDownloadId");
+        refresh();
+      });
+    };
     pickerContainer.appendChild(clearBtn);
     panel.appendChild(pickerContainer);
 

@@ -1,23 +1,45 @@
 /**
- * Extension Generator Plugin Template
- * 
- * To add a new command generator to this extension by hand:
- * 
- * 1. Copy this file and rename it (e.g. httpie.js).
- * 2. Configure the metadata fields below:
- *    - id: Unique string ID.
- *    - name: Display name in the popup UI selector.
- *    - shellEscaping: True if it uses shell escaping (shows Windows double-quotes checkbox).
- *    - defaultOptions: Key/value options specific to this tool.
- *    - customInputs: Metadata describing UI inputs for the configuration panel.
- * 3. Implement the generate() function to format and return the CLI command.
- * 4. Add the plugin script to the background scripts list in manifest.json and include it in popup.html before popup.js.
- * 5. Rebuild or reload the extension. The popup UI will automatically render the tool.
- *    Optionally, you can define a custom render(panel, context) function to completely
- *    override and customize the plugin's UI layout and event logic.
+ * ext267 Plugin Template
+ *
+ * HOW TO ADD A NEW PLUGIN
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 1. Copy this file and rename it (e.g., plugins/httpie.js).
+ * 2. Fill in the plugin metadata (id, name, etc.) and implement render().
+ * 3. Add the script to manifest.json → "background" → "scripts" array
+ *    so it runs in the background service worker / event page.
+ * 4. Add a <script> tag for it in popup.html, BEFORE popup.js:
+ *      <script src="plugins/httpie.js"></script>
+ * 5. Reload the extension. The popup selector will auto-populate.
+ *
+ * PLUGIN TYPES
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A) Download-intercepting plugin (like cliget):
+ *    - Uses _isBackground guard to register webRequest listeners in background.
+ *    - Communicates with popup via ext.runtime.sendMessage (namespaced by id).
+ *    - Implements render() to display intercepted data and a generated command.
+ *
+ * B) Standalone webapp plugin (like a scratchpad or browser tool):
+ *    - No background guard needed; all logic lives in render().
+ *    - Can use ext.* APIs directly inside render() since plugins define their
+ *      own `ext` at file scope.
+ *    - No generate() required.
+ *
+ * CONTEXT OBJECT (passed to render)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *   { refresh }
+ *   - refresh(): Re-runs this plugin's render() to update the panel UI.
+ *                Call after any state change (e.g., storage write).
+ *
+ * NOTE: Each plugin defines its own `ext` at file scope. Do NOT rely on
+ * context.ext — it is not provided by the popup shell.
  */
 
-// Self-registration setup
+"use strict";
+
+const ext = typeof browser !== "undefined" ? browser : chrome;
+const extAction = ext.action || ext.browserAction;
+
+// Self-registration bootstrap (safe to duplicate across plugin files)
 globalThis.Plugins = globalThis.Plugins || new Map();
 if (typeof globalThis.registerPlugin !== "function") {
   globalThis.registerPlugin = function (plugin) {
@@ -25,65 +47,82 @@ if (typeof globalThis.registerPlugin !== "function") {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION A: Background-only code (service worker / event page)
+// Remove this entire block if this plugin does NOT intercept network traffic.
+// ─────────────────────────────────────────────────────────────────────────────
+const _isBackground = typeof window === "undefined" ||
+  (typeof location !== "undefined" && location.pathname !== "/popup.html");
+
+if (_isBackground) {
+  // Example: store intercepted data keyed by plugin id to avoid collisions
+  const _store = new Map();
+
+  // Example message handler (namespace all messages with your plugin id)
+  ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (!Array.isArray(msg)) return;
+    const [name, ...args] = msg;
+
+    if (name === "mytool:getData") {
+      sendResponse(Array.from(_store.values()));
+      return true;
+    }
+  });
+
+  // Example: webRequest listener (only needed if capturing requests/downloads)
+  // ext.webRequest.onResponseStarted.addListener(
+  //   (details) => { /* ... */ },
+  //   { urls: ["<all_urls>"], types: ["main_frame", "sub_frame"] },
+  //   ["responseHeaders"]
+  // );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION B: Plugin registration (runs in both popup and background)
+// ─────────────────────────────────────────────────────────────────────────────
 globalThis.registerPlugin({
-  // Unique tool ID. Used internally and as the command option key
+  /** Unique plugin ID. Used as message namespace prefix and storage key. */
   id: "mytool",
 
-  // Human-readable name shown in the tool selector in popup UI
+  /** Display name shown in the popup selector dropdown. */
   name: "MyTool",
 
-  // Set to true if this tool accepts shell escaping options (Windows doubleQuotes).
-  // If true, the popup will render the "Escape with double-quotes (Windows)" checkbox.
-  shellEscaping: true,
-
-  // Default option values specific to this tool.
-  // These are merged automatically with global defaultOptions at startup.
-  defaultOptions: {
-    mytoolOptions: ""
-  },
-
-  // Input configurations dynamically rendered in the popup options panel for this tool.
-  customInputs: [
-    {
-      key: "mytoolOptions",
-      label: "Extra MyTool arguments:",
-      placeholder: "e.g. --verbose --insecure",
-      type: "text" // Supports "text" and "checkbox" types
-    }
-  ],
-
   /**
-   * Generates the command-line instruction string.
-   * 
-   * @param {string} url - The intercepted request URL.
-   * @param {string} method - HTTP method (e.g., GET, POST).
-   * @param {Array<{name: string, value: string}>} headers - Filtered request headers.
-   * @param {Object|null} payload - Request payload/body info.
-   * @param {string|null} filename - Captured file name or null.
-   * @param {Object} options - Current configuration options.
-   * @returns {string} The formatted command-line execution string.
+   * Render the plugin's UI into the given panel element.
+   *
+   * @param {HTMLElement} panel   - The content area to render into. Always cleared before call.
+   * @param {Object}      context - { refresh } — call refresh() after any state change.
    */
-  generate: function (url, method, headers, payload, filename, options) {
-    const esc = globalThis.escapeShellArg;
-    
-    // Build the command array
-    let parts = ["mytool"];
+  render: async function (panel, context) {
+    const { refresh } = context;
 
-    // Append extra arguments configured in popup UI
-    if (options.mytoolOptions) {
-      parts.push(options.mytoolOptions);
-    }
+    // ── Example: load persisted state ──────────────────────────────────────
+    const stored = await ext.storage.local.get(["mytool_value"]);
+    const currentValue = stored.mytool_value || "";
 
-    // Append headers
-    for (let header of headers) {
-      let formattedHeader = esc(`${header.name}: ${header.value}`, options.doubleQuotes);
-      parts.push(`--header ${formattedHeader}`);
-    }
+    // ── Build UI ────────────────────────────────────────────────────────────
+    const label = document.createElement("label");
+    label.className = "text-input-label";
+    label.textContent = "My Setting:";
 
-    // Append URL
-    parts.push(esc(url, options.doubleQuotes));
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = currentValue;
+    input.placeholder = "Enter a value…";
+    input.onchange = async (e) => {
+      await ext.storage.local.set({ mytool_value: e.target.value });
+      refresh();
+    };
+    label.appendChild(input);
 
-    // Return final command string joined by space
-    return parts.join(" ");
+    const btn = document.createElement("button");
+    btn.className = "btn btn-blue btn-full";
+    btn.textContent = "Do Something";
+    btn.onclick = () => {
+      alert(`Value: ${input.value || "(empty)"}`);
+    };
+
+    panel.appendChild(label);
+    panel.appendChild(btn);
   }
 });

@@ -11,7 +11,7 @@
 ### Core Architecture
 - **Plugin-based Extensible Generators**: Each plugin registers itself dynamically in both popup and background scopes via a standard `registerPlugin` registry map. Plugins do not rely on shared scripts like `utils.js` or `background.js`.
 - **Dynamic Popup UI Selector**: The popup selector is built dynamically in [popup.js](file:///home/dat/repos/ext267/popup.js) by mapping registered plugin metadata from the global map.
-- **Decoupled Plugin Execution**: Plugins run as completely self-contained entities. If a plugin requires background listeners (such as downloads interception via webRequest APIs) or utility helpers (like shell escaping), all that logic resides inside the plugin file itself (e.g. [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js)), isolated inside a service worker context check.
+- **Decoupled Plugin Execution**: Plugins run as completely self-contained entities. If a plugin requires background listeners (such as downloads interception via webRequest APIs) or utility helpers (like shell escaping), all that logic resides inside the plugin file itself (e.g. [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js)), isolated behind the `_isBackground` guard. Each plugin file defines its own `ext` at file scope and does not rely on shared globals from other scripts.
 - **Self-Contained Dynamic Interfaces**: Each plugin panel dynamically registers and builds its own layout. If it uses custom rendering (via the `render(panel, context)` hook), it draws all forms, picker select lists, options inputs, output textareas, and buttons locally.
 
 ---
@@ -21,8 +21,8 @@
 To maintain extension performance, stability, and compatibility on both desktop and mobile platforms, all code modifications must adhere to the following standards:
 
 ### 1. Static WebRequest Listeners
-* **Why**: Continuous tracking of non-document resources drains system resources. 
-* **Standard**: Inside the service worker check of download-capturing plugins (e.g., [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js)), webRequest listeners must be statically registered synchronously at startup, matching only `["main_frame", "sub_frame"]` to capture document page frame downloads with zero excess overhead.
+* **Why**: Continuous tracking of non-document resources drains system resources.
+* **Standard**: Inside the `_isBackground` guard of download-capturing plugins (e.g., [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js)), webRequest listeners must be statically registered synchronously at startup, matching only `["main_frame", "sub_frame"]` to capture document page frame downloads with zero excess overhead.
 
 ### 2. Stateless MV3 Message Passing
 * **Why**: Manifest V3 background service workers are ephemeral and will suspend when idle. Keeping request objects only in background memory and looking them up via IDs from the popup will fail if the background worker has recycled.
@@ -40,31 +40,51 @@ To maintain extension performance, stability, and compatibility on both desktop 
 
 ### 4. Plugin Registry Standards
 * **Why**: To keep the extension codebase modular and decoupled from specific plugins, allowing new tools to be added with zero changes to popup or background core scripts.
-* **Standard**: Every plugin must register itself at load time. If it requires a fully customized interface or specialized event logic, it can optionally provide a `render(panel, context)` function:
+* **Standard**: Every plugin must register itself at load time via `globalThis.registerPlugin()`. Plugins come in two forms:
+
+  **A. Download-intercepting plugin** (uses `_isBackground` guard, registers webRequest listeners):
   ```js
+  const ext = typeof browser !== "undefined" ? browser : chrome;
+
+  // Correct cross-browser background context detection:
+  // - Chrome MV3: window is undefined (pure service worker)
+  // - Firefox MV3: background.scripts runs as event page — window exists, but document does not
+  //   and location.pathname is NOT /popup.html
+  const _isBackground = typeof window === "undefined" ||
+    (typeof location !== "undefined" && location.pathname !== "/popup.html");
+
+  if (_isBackground) {
+    ext.webRequest.onResponseStarted.addListener(/* ... */);
+    ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      // Namespace all messages with your plugin id: "myplugin:action"
+    });
+  }
+
   globalThis.registerPlugin({
-    id: "tool-id",
-    name: "Display Name",
-    shellEscaping: true, // Set true if it accepts shell escaping options (Windows doubleQuotes)
-    defaultOptions: {
-      toolOptions: "" // Custom options defaults
-    },
-    customInputs: [
-      {
-        key: "toolOptions",
-        label: "Extra Tool arguments:",
-        placeholder: "e.g. --flags",
-        type: "text" // Support text inputs and checkboxes
-      }
-    ],
-    generate: function (url, method, headers, payload, filename, options) {
-      // Return generated command string
-    },
+    id: "myplugin",
+    name: "My Plugin",
     render: async function (panel, context) {
-      // Optional: draw custom controls and attach event listeners to panel
+      const { refresh } = context; // context only provides { refresh }
+      // Each plugin defines its own `ext` at file scope — do NOT use context.ext
     }
   });
   ```
+
+  **B. Standalone webapp plugin** (no background guard needed):
+  ```js
+  const ext = typeof browser !== "undefined" ? browser : chrome;
+
+  globalThis.registerPlugin({
+    id: "myplugin",
+    name: "My Plugin",
+    render: async function (panel, context) {
+      const { refresh } = context;
+      // Use ext.* APIs directly — ext is defined at this file's scope
+    }
+  });
+  ```
+
+* **`render(panel, context)` context shape**: `{ refresh }` only. The popup shell passes no extension APIs — each plugin is responsible for its own `ext` variable defined at file scope.
 
 ---
 
