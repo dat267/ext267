@@ -104,7 +104,7 @@ html, body {
   }
 }
 
-.command-view {
+.plugin-panel {
   padding: 14px;
   display: flex;
   flex-direction: column;

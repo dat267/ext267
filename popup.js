@@ -1,12 +1,7 @@
 "use strict";
 
-// Plugin registry bootstrap — plugins self-register into this map before popup.js runs.
-globalThis.Plugins = globalThis.Plugins || new Map();
-if (typeof globalThis.registerPlugin !== "function") {
-  globalThis.registerPlugin = function (plugin) {
-    globalThis.Plugins.set(plugin.id, plugin);
-  };
-}
+// Plugin registry — populated by each plugin <script> before this file runs.
+// popup.js is read-only here; plugins bootstrap globalThis.Plugins themselves.
 
 // ----------------------------------------------------
 // Pure DOM Shell — no extension API usage here.
@@ -60,7 +55,7 @@ async function renderPanel(pluginId) {
   if (!panel) return;
 
   panel.innerHTML = "";
-  panel.className = "command-view";
+  panel.className = "plugin-panel";
 
   const plugin = globalThis.Plugins.get(pluginId);
   if (!plugin) return;
