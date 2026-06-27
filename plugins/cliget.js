@@ -285,6 +285,7 @@ if (_isBackground) {
     downloads.push(request);
     if (downloads.length > MAX_ITEMS) downloads = downloads.slice(-MAX_ITEMS);
     await saveDownloads(downloads);
+    await ext.storage.local.set({ selectedDownloadId: request.id });
 
     if (extAction && extAction.getBadgeText) {
       extAction.getBadgeText({}).then((txt) => {
