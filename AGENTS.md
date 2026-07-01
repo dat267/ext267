@@ -121,3 +121,27 @@ Verify changes by running the following tasks:
 * **Lint**: `npm run lint` (Checks WebExtension and ESLint structure)
 * **Development**: Run `npx web-ext run` to test changes inside Firefox.
 * **Build**: `npm run build` or `npm run package:xpi` to package the extension.
+
+---
+
+## CI/CD & Publishing (addons.mozilla.org)
+
+A GitHub Actions pipeline is configured at `.github/workflows/amo-publish.yml` to automate submission and signing to the Mozilla Add-ons (AMO) store.
+
+### Configuration & Secrets
+For the pipeline to work, configure the following **Repository Secrets** in your GitHub repository:
+* `AMO_API_KEY`: The API key (JWT issuer) from the [AMO Developer Hub](https://addons.mozilla.org/developers/addon/api/key/).
+* `AMO_API_SECRET`: The API secret (JWT secret) from the AMO Developer Hub.
+
+### Workflow Behavior
+1. **Trigger Options**:
+   * **Tag Pushes**: Runs automatically when a tag matching `v*` is pushed. By default, it submits to the **listed** channel.
+   * **Manual Dispatch**: Can be triggered manually from the GitHub Actions tab. Allows selecting between **listed** (AMO store release) and **unlisted** (self-distribution package) channels.
+2. **Execution Steps**:
+   * Checks out the repository.
+   * Installs Node.js dependencies (`npm ci`).
+   * Runs the webextension linter (`npm run lint`).
+   * Calls `npx web-ext sign` to package, upload, and submit/sign the extension.
+   * For the `listed` channel, it passes `--approval-timeout 0` so the pipeline finishes immediately after a successful upload rather than hanging for manual review.
+   * Uploads built artifact packages to the run summary.
+

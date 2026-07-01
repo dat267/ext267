@@ -1,0 +1,76 @@
+name: Publish to Mozilla Add-ons (AMO)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Signing channel (listed or unlisted)'
+        required: true
+        default: 'listed'
+        type: choice
+        options:
+          - listed
+          - unlisted
+
+jobs:
+  publish:
+    name: Sign and Publish Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Build and Sign Extension
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          # Default to 'listed' if triggered by a tag push, or use user input on manual dispatch
+          CHANNEL: ${{ github.event.inputs.channel || 'listed' }}
+        run: |
+          if [ -z "$AMO_API_KEY" ] || [ -z "$AMO_API_SECRET" ]; then
+            echo "Error: AMO_API_KEY or AMO_API_SECRET secrets are not configured."
+            exit 1
+          fi
+          
+          # For listed channel, we set --approval-timeout 0 to avoid blocking the pipeline 
+          # while waiting for the manual AMO review process to complete.
+          if [ "$CHANNEL" = "listed" ]; then
+            echo "Publishing as listed addon to AMO store..."
+            npx web-ext sign \
+              --source-dir . \
+              --artifacts-dir web-ext-artifacts \
+              --api-key "$AMO_API_KEY" \
+              --api-secret "$AMO_API_SECRET" \
+              --channel "$CHANNEL" \
+              --approval-timeout 0
+          else
+            echo "Signing as unlisted addon (self-distribution)..."
+            npx web-ext sign \
+              --source-dir . \
+              --artifacts-dir web-ext-artifacts \
+              --api-key "$AMO_API_KEY" \
+              --api-secret "$AMO_API_SECRET" \
+              --channel "$CHANNEL"
+          fi
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ext267-amo-artifacts
+          path: web-ext-artifacts/
