@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ext267",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "A multipurpose, extensible browser toolkit. Capture download requests and generate CLI commands for curl, wget, and aria2c.",
   "icons": {
     "48": "icons/ext267.svg",
