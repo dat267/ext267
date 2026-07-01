@@ -48,26 +48,23 @@ jobs:
             exit 0
           fi
           
-          # For listed channel, we set --approval-timeout 0 to avoid blocking the pipeline 
-          # while waiting for the manual AMO review process to complete.
+          EXTRA_FLAGS=""
           if [ "$CHANNEL" = "listed" ]; then
             echo "Publishing as listed addon to AMO store..."
-            npx web-ext sign \
-              --source-dir . \
-              --artifacts-dir web-ext-artifacts \
-              --api-key "$AMO_API_KEY" \
-              --api-secret "$AMO_API_SECRET" \
-              --channel "$CHANNEL" \
-              --approval-timeout 0
+            # For listed channel, we set --approval-timeout 0 to avoid blocking the pipeline 
+            # while waiting for the manual AMO review process to complete.
+            EXTRA_FLAGS="--approval-timeout 0"
           else
             echo "Signing as unlisted addon (self-distribution)..."
-            npx web-ext sign \
-              --source-dir . \
-              --artifacts-dir web-ext-artifacts \
-              --api-key "$AMO_API_KEY" \
-              --api-secret "$AMO_API_SECRET" \
-              --channel "$CHANNEL"
           fi
+
+          npx web-ext sign \
+            --source-dir . \
+            --artifacts-dir web-ext-artifacts \
+            --api-key "$AMO_API_KEY" \
+            --api-secret "$AMO_API_SECRET" \
+            --channel "$CHANNEL" \
+            $EXTRA_FLAGS
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4

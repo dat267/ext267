@@ -240,14 +240,16 @@ function generateAria2(url, method, headers, payload, filename, options) {
 
 function generate(url, method, headers, payload, filename, options) {
   const tool = options.cliTool || "curl";
-  if (tool === "curl") {
-    return generateCurl(url, method, headers, payload, filename, options);
-  } else if (tool === "wget") {
-    return generateWget(url, method, headers, payload, filename, options);
-  } else if (tool === "aria2") {
-    return generateAria2(url, method, headers, payload, filename, options);
+  switch (tool) {
+    case "curl":
+      return generateCurl(url, method, headers, payload, filename, options);
+    case "wget":
+      return generateWget(url, method, headers, payload, filename, options);
+    case "aria2":
+      return generateAria2(url, method, headers, payload, filename, options);
+    default:
+      throw new Error(`Unknown CLI tool: ${tool}`);
   }
-  throw new Error(`Unknown CLI tool: ${tool}`);
 }
 
 // ----------------------------------------------------
@@ -532,20 +534,14 @@ globalThis.registerPlugin({
 
     // Local fileSizeToText helper
     const fileSizeToText = (size) => {
-      let unit = "B";
-      if (size >= 1024) {
-        size /= 1024;
-        unit = "KB";
-        if (size >= 1024) {
-          size /= 1024;
-          unit = "MB";
-          if (size >= 1024) {
-            size /= 1024;
-            unit = "GB";
-          }
-        }
+      let val = size;
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let i = 0;
+      while (val >= 1024 && i < units.length - 1) {
+        val /= 1024;
+        i++;
       }
-      return `${size.toFixed(1)} ${unit}`;
+      return `${val.toFixed(1)} ${units[i]}`;
     };
 
     // Load state and download list
