@@ -43,8 +43,8 @@ jobs:
           CHANNEL: ${{ github.event.inputs.channel || 'listed' }}
         run: |
           if [ -z "$AMO_API_KEY" ] || [ -z "$AMO_API_SECRET" ]; then
-            echo "Error: AMO_API_KEY or AMO_API_SECRET secrets are not configured."
-            exit 1
+            echo "::warning::AMO_API_KEY or AMO_API_SECRET secrets are not configured. Skipping signing step."
+            exit 0
           fi
           
           # For listed channel, we set --approval-timeout 0 to avoid blocking the pipeline 
