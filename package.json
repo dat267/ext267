@@ -1,6 +1,6 @@
 {
   "name": "ext267",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "A multipurpose, extensible browser toolkit with download capture and network activity recording.",
   "scripts": {
     "lint": "web-ext lint",

@@ -23,27 +23,23 @@ function buildSelector(plugins, startPlugin) {
   const selector = document.getElementById("plugin-selector");
   if (!selector) return;
 
-  // Hide the selector when only a single plugin is installed — no choice to make
+  // Show the selector even with a single plugin for discoverability on mobile
   const header = document.querySelector(".app-header");
-  if (plugins.length <= 1) {
-    if (header) header.style.display = "none";
-  } else {
-    if (header) header.style.display = "";
-    selector.innerHTML = "";
-    plugins.forEach((plugin) => {
-      const opt = document.createElement("option");
-      opt.value = plugin.id;
-      opt.textContent = plugin.name || plugin.id;
-      if (plugin.id === startPlugin) opt.selected = true;
-      selector.appendChild(opt);
-    });
+  if (header) header.style.display = "";
+  selector.innerHTML = "";
+  plugins.forEach((plugin) => {
+    const opt = document.createElement("option");
+    opt.value = plugin.id;
+    opt.textContent = plugin.name || plugin.id;
+    if (plugin.id === startPlugin) opt.selected = true;
+    selector.appendChild(opt);
+  });
 
-    selector.onchange = (e) => {
-      const activeId = e.target.value;
-      localStorage.setItem("lastActiveTab", activeId);
-      renderPanel(activeId);
-    };
-  }
+  selector.onchange = (e) => {
+    const activeId = e.target.value;
+    localStorage.setItem("lastActiveTab", activeId);
+    renderPanel(activeId);
+  };
 
   renderPanel(startPlugin);
 }
