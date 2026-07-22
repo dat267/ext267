@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ext267",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "A multipurpose, extensible browser toolkit with download capture and network activity recording.",
   "icons": {
     "48": "icons/ext267.svg",
