@@ -1,32 +1,55 @@
-# cliget
+# ext267
 
-Download login-protected files from the command line using curl, wget or aria2.
+A multipurpose, extensible browser toolkit with a plugin-based architecture.
 
-This addon will generate commands that emulate the request as though it was
-coming from your browser by sending the same cookies, user agent string and
-referrer. With this addon you can download email attachments, purchased
-software/media, source code from a private repository to a remote server without
-having to download the files locally first. If come across a website where
-cliget doesn't work, please open an issue providing details to help reproduce
-the problem.
+## Plugins
 
-*Windows users*: Enable the "Escape with double-quotes" option because Windows
-doesn't support single quotes. If you use cygwin, however, you don't need to
-enable this option.
+### cliget
+Capture download requests from your browser and generate equivalent CLI commands for **curl**, **wget**, and **aria2c**. Emulates the same cookies, user agent, and referrer as your browser session.
 
-**Please be aware** of potential security and privacy implications from cookies
-being exposed in the download command.
+Useful for downloading login-protected files (email attachments, private repos, purchased software) to a remote server without downloading locally first.
+
+*Windows users*: Enable the "Escape with double-quotes" option (cmd.exe doesn't support single quotes). Cygwin users can keep the default.
+
+### Activity Recorder
+Record all browser network activity to reverse-engineer website functionality. Captures every request's URL, method, headers, request body, status code, content-type, and timing — grouped by page navigation. Export as **AI-friendly Markdown** (structured by domain, with header tables and body code blocks) or raw **JSON**.
+
+Ideal for generating API documentation, implementing automated processing in Go/Python/JavaScript, or feeding context to coding agents.
 
 ---
 
-## Developers & Extensibility
+## Developer Guide
 
-This extension is built with a plugin-based architecture, making it extremely easy for a human developer to add new command-line tool plugins (e.g. `httpie`, `fetch`, `curl-custom`) **by hand, without needing an LLM agent**.
+This extension uses a self-registering plugin system. Each plugin is fully self-contained — no shared utilities, no cross-plugin dependencies.
 
-### Adding a New Tool:
-1. **Copy the Template**: Make a copy of [plugin-template.js](file:///home/dat/repos/ext267/plugins/plugin-template.js) and rename it (e.g., `mytool.js` inside the `plugins/` folder).
-2. **Implement Generator**: Set your tool's metadata properties (`id`, `name`, `shellEscaping`, custom settings, and dynamic `customInputs` description) and implement the custom logic inside the `generate` function.
-3. **Register Plugin**: Add your plugin script path to:
-    - The `background.scripts` array in [manifest.json](file:///home/dat/repos/ext267/manifest.json).
-    - A `<script>` tag inside [popup.html](file:///home/dat/repos/ext267/popup.html) before `popup.js`.
-4. **Reload/Verify**: Load or refresh the extension. The popup UI will dynamically detect your plugin, add it as an option in the header dropdown selector, and render it. You can optionally implement a custom `render(panel, context)` method on the plugin object to completely customize its UI drawing and logic.
+### Plugin Types
+
+**Download-intercepting** (like cliget) — uses the `_isBackground` guard to register `webRequest` listeners in the background context, communicates with the popup via namespaced messages.
+
+**Standalone** (like the recorder) — all logic lives in `render(panel, context)`. Can use `ext.*` APIs directly.
+
+### Adding a New Plugin
+
+1. Copy `plugins/plugin-template.js` to `plugins/yourplugin.js`.
+2. Set `id`, `name`, and implement `render(panel, context)`.
+3. Add the script to `manifest.json` → `background.scripts`.
+4. Add a `<script>` tag in `popup.html` before `popup.js`.
+5. Reload the extension — the popup selector auto-populates.
+
+Full architecture details are in [AGENTS.md](AGENTS.md).
+
+---
+
+## Building
+
+```bash
+npm ci
+npm run lint     # web-ext lint + ESLint
+npm run build    # package signed XPI
+```
+
+---
+
+## CI/CD
+
+A GitHub Actions pipeline at `.github/workflows/amo-publish.yml` handles AMO signing. Trigger by pushing a `v*` tag or manually from the Actions tab. Requires `AMO_API_KEY` and `AMO_API_SECRET` repository secrets.

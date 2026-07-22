@@ -1,18 +1,25 @@
 # Project Overview: ext267
 
-**ext267** is a modernized, responsive, and personal fork of the original `cliget` extension. It enables users to capture download requests from their browser and generate equivalent command-line instructions for `curl`, `wget`, and `aria2c`.
+**ext267** is a modernized, responsive, extensible browser toolkit with a plugin-based architecture. It ships with two plugins: **cliget** (download interception → CLI command generation) and **Activity Recorder** (network activity capture → AI-friendly Markdown/JSON export).
 
 ### Main Technologies
 - **Platform**: Browser WebExtension (Manifest V3 compatible).
 - **Languages**: Plain JavaScript, CSS3 (Modern Firefox-inspired theme).
-- **Tooling**: `web-ext` for building, linting, and packaging.
+- **Tooling**: `web-ext` for building, linting, and packaging. ESLint v9 flat config for code quality.
 - **Permissions**: `webRequest`, `storage`, `tabs`, `downloads`.
 
 ### Core Architecture
-- **Plugin-based Extensible Generators**: Each plugin registers itself dynamically in both popup and background scopes via a standard `registerPlugin` registry map. Plugins do not rely on shared scripts like `utils.js` or `background.js`.
+- **Plugin-based Extensible Tools**: Each plugin registers itself dynamically in both popup and background scopes via a standard `registerPlugin` registry map. Plugins do not rely on shared scripts like `utils.js` or `background.js`.
 - **Dynamic Popup UI Selector**: The popup selector is built dynamically in [popup.js](file:///home/dat/repos/ext267/popup.js) by mapping registered plugin metadata from the global map.
-- **Decoupled Plugin Execution**: Plugins run as completely self-contained entities. If a plugin requires background listeners (such as downloads interception via webRequest APIs) or utility helpers (like shell escaping), all that logic resides inside the plugin file itself (e.g. [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js)), isolated behind the `_isBackground` guard. Each plugin file defines its own `ext` at file scope and does not rely on shared globals from other scripts.
+- **Decoupled Plugin Execution**: Plugins run as completely self-contained entities. If a plugin requires background listeners (such as downloads interception or request recording via webRequest APIs) or utility helpers (like shell escaping), all that logic resides inside the plugin file itself (e.g. [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js), [recorder.js](file:///home/dat/repos/ext267/plugins/recorder.js)), isolated behind the `_isBackground` guard. Each plugin file defines its own `ext` at file scope and does not rely on shared globals from other scripts.
 - **Self-Contained Dynamic Interfaces**: Each plugin panel dynamically registers and builds its own layout. If it uses custom rendering (via the `render(panel, context)` hook), it draws all forms, picker select lists, options inputs, output textareas, and buttons locally.
+
+### Plugins
+
+| Plugin | Type | Purpose |
+|--------|------|---------|
+| [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js) | Download-intercepting | Intercepts main_frame/sub_frame downloads and generates curl/wget/aria2c commands |
+| [recorder.js](file:///home/dat/repos/ext267/plugins/recorder.js) | Request-intercepting | Captures ALL network requests across tabs and exports as Markdown or JSON |
 
 ---
 
@@ -22,27 +29,33 @@ To maintain extension performance, stability, and compatibility on both desktop 
 
 ### 1. Static WebRequest Listeners
 * **Why**: Continuous tracking of non-document resources drains system resources.
-* **Standard**: Inside the `_isBackground` guard of download-capturing plugins (e.g., [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js)), webRequest listeners must be statically registered synchronously at startup, matching only `["main_frame", "sub_frame"]` to capture document page frame downloads with zero excess overhead.
+* **Standard**: Inside the `_isBackground` guard of plugins that use webRequest, listeners must be statically registered synchronously at startup. The `types` filter must be as narrow as the plugin requires:
+  * **cliget** (download interception): `["main_frame", "sub_frame"]` only.
+  * **recorder** (network capture): all types (no filter) since it needs to record everything, including XHR/fetch API calls.
 
 ### 2. Stateless MV3 Message Passing
 * **Why**: Manifest V3 background service workers are ephemeral and will suspend when idle. Keeping request objects only in background memory and looking them up via IDs from the popup will fail if the background worker has recycled.
-* **Standard**: When sending messages from the popup to request actions (like generating commands), **always pass the full request payload object** rather than a database/Map ID reference. Refer to `render` in `cliget.js` and the corresponding message handler branch.
+* **Standard**: When sending messages from the popup to request actions, **always pass the full request payload object** rather than a database/Map ID reference. Refer to `render` in each plugin and the corresponding message handler branch.
 
 ### 3. Memory Leak Protection (FIFO Map Eviction)
 * **Why**: The background map stores pending request details. If network requests are aborted or never complete, this Map can grow unboundedly.
-* **Standard**: Implement a FIFO eviction limit in `beforeRequestCallback` inside the plugin's background check to bound the Map size:
+* **Standard**: Implement a FIFO eviction limit on pending request Maps:
   ```js
-  if (currentRequests.size > 150) {
-    const oldestKey = currentRequests.keys().next().value;
-    currentRequests.delete(oldestKey);
+  if (pendingRequests.size > 200) {
+    const oldestKey = pendingRequests.keys().next().value;
+    pendingRequests.delete(oldestKey);
   }
   ```
 
-### 4. Plugin Registry Standards
+### 4. Redirect & Error Handling in webRequest Pipelines
+* **Why**: Redirected requests fire `onBeforeRedirect` instead of `onCompleted`. Failed requests fire `onErrorOccurred`. Without handling these, pending request entries accumulate and leak memory.
+* **Standard**: Always register listeners for `onBeforeRedirect` (clean up pending entries) and `onErrorOccurred` (finalize + clean up). See `recorder.js` background section for the pattern.
+
+### 5. Plugin Registry Standards
 * **Why**: To keep the extension codebase modular and decoupled from specific plugins, allowing new tools to be added with zero changes to popup or background core scripts.
 * **Standard**: Every plugin must register itself at load time via `globalThis.registerPlugin()`. Plugins come in two forms:
 
-  **A. Download-intercepting plugin** (uses `_isBackground` guard, registers webRequest listeners):
+  **A. Background-intercepting plugin** (uses `_isBackground` guard, registers webRequest/message listeners):
   ```js
   const ext = typeof browser !== "undefined" ? browser : chrome;
 
@@ -86,6 +99,10 @@ To maintain extension performance, stability, and compatibility on both desktop 
 
 * **`render(panel, context)` context shape**: `{ refresh }` only. The popup shell passes no extension APIs — each plugin is responsible for its own `ext` variable defined at file scope.
 
+### 6. Session Storage for MV3 Resilience
+* **Why**: Background service workers can be terminated at any time. In-memory recording state is lost on restart.
+* **Standard**: Persist session-scoped state to `ext.storage.session` (10MB limit, cleared on browser restart). On startup, restore state from `_recorder_status` / `_recorder_session` keys. See `recorder.js` for the pattern.
+
 ---
 
 ## Design and Styling System
@@ -98,6 +115,9 @@ All styling resides in [popup.css](file:///home/dat/repos/ext267/popup.css) usin
   * Combine with modifier classes like `.btn-blue` (accent borders) or `.btn-red` (warning borders).
   * Avoid filling solid backgrounds unless explicitly required for prominent primary actions.
   * Interactive states must define transitions for hover/active states with subtle scaling or border highlights.
+
+### CSS Animations
+* Add animations in [popup.css](file:///home/dat/repos/ext267/popup.css) as `@keyframes` blocks. Use dedicated utility classes (e.g., `.recording-indicator`) rather than inline animation styles.
 
 ---
 
@@ -112,15 +132,24 @@ All styling resides in [popup.css](file:///home/dat/repos/ext267/popup.css) usin
   ```js
   function decodeHeaderValue(str) { ... }
   ```
+* **No innerHTML for Dynamic Content**: Always use `document.createElement` and `textContent` for rendering user-visible or dynamic values. Do not use `innerHTML` with template literals containing runtime data.
+
+---
+
+## Linting & Code Quality
+
+* **ESLint**: Uses ESLint v9 flat config ([eslint.config.mjs](file:///home/dat/repos/ext267/eslint.config.mjs)) with `eslint:recommended`, `eslint-plugin-prettier`, and custom rules (`no-shadow`, `prefer-arrow-callback`, `curly`). Node.js build scripts use `globals.node`; extension code uses `globals.browser` + `globals.webextensions`.
+* **Prettier**: Configured via [.prettierrc](file:///home/dat/repos/ext267/.prettierrc) and run as an ESLint rule.
+* **Empty catch blocks**: Use `catch { /* explain why */ }` (optional catch binding, ES2019+). Never use `catch (e) {}` with an empty body.
 
 ---
 
 ## Building & Verification
 
 Verify changes by running the following tasks:
-* **Lint**: `npm run lint` (Checks WebExtension and ESLint structure)
+* **Lint**: `npm run lint` (Checks WebExtension structure via `web-ext lint`). Also run `npx eslint .` for code quality.
 * **Development**: Run `npx web-ext run` to test changes inside Firefox.
-* **Build**: `npm run build` or `npm run package:xpi` to package the extension.
+* **Build**: `npm run build` or `npm run package:xpi` to package the extension into `web-ext-artifacts/ext267.xpi`.
 
 ---
 
@@ -145,3 +174,5 @@ For the pipeline to work, configure the following **Repository Secrets** in your
    * For the `listed` channel, it passes `--approval-timeout 0` so the pipeline finishes immediately after a successful upload rather than hanging for manual review.
    * Uploads built artifact packages to the run summary.
 
+### Android Installation
+For Firefox on Android, trigger the workflow with the `unlisted` channel. The signed XPI from the artifacts can be side-loaded via `Settings → Install extension from file` (enable debug menu: tap the Firefox logo 5 times in `Settings → About Firefox`).
