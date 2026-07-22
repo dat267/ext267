@@ -64,6 +64,7 @@ jobs:
             --api-key "$AMO_API_KEY" \
             --api-secret "$AMO_API_SECRET" \
             --channel "$CHANNEL" \
+            --amo-metadata amo-metadata.json \
             $EXTRA_FLAGS
 
       - name: Upload Build Artifacts
