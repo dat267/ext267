@@ -37,22 +37,22 @@
 "use strict";
 
 const ext = typeof browser !== "undefined" ? browser : chrome;
+// eslint-disable-next-line no-unused-vars
 const extAction = ext.action || ext.browserAction;
 
 // Self-registration bootstrap (safe to duplicate across plugin files)
 globalThis.Plugins = globalThis.Plugins || new Map();
-if (typeof globalThis.registerPlugin !== "function") {
+if (typeof globalThis.registerPlugin !== "function")
   globalThis.registerPlugin = function (plugin) {
     globalThis.Plugins.set(plugin.id, plugin);
   };
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION A: Background-only code (service worker / event page)
 // Remove this entire block if this plugin does NOT intercept network traffic.
 // ─────────────────────────────────────────────────────────────────────────────
-const _isBackground = typeof window === "undefined" ||
-  (typeof location !== "undefined" && location.pathname !== "/popup.html");
+const _isBackground =
+  typeof window === "undefined" || (typeof location !== "undefined" && location.pathname !== "/popup.html");
 
 if (_isBackground) {
   // Example: store intercepted data keyed by plugin id to avoid collisions
@@ -61,6 +61,7 @@ if (_isBackground) {
   // Example message handler (namespace all messages with your plugin id)
   ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!Array.isArray(msg)) return;
+    // eslint-disable-next-line no-unused-vars
     const [name, ...args] = msg;
 
     if (name === "mytool:getData") {

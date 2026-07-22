@@ -5,25 +5,24 @@ const extAction = ext.action || ext.browserAction;
 
 // Self-registration setup
 globalThis.Plugins = globalThis.Plugins || new Map();
-if (typeof globalThis.registerPlugin !== "function") {
+if (typeof globalThis.registerPlugin !== "function")
   globalThis.registerPlugin = function (plugin) {
     globalThis.Plugins.set(plugin.id, plugin);
   };
-}
 
 // ----------------------------------------------------
 // Utility Helpers (Self-Contained)
 // ----------------------------------------------------
 function escapeShellArg(arg, doubleQuotes) {
   if (!arg) return "''";
-  let ret = "";
+  let ret;
 
   if (doubleQuotes) {
     ret = arg.replace(/["\\]/g, (m) => `\\${m}`);
     return `"${ret}"`;
   }
 
-  ret = arg.replace(/'/g, (m) => `\'\\\'\'`);
+  ret = arg.replace(/'/g, () => `'\\''`);
   return `'${ret}'`;
 }
 
@@ -31,7 +30,7 @@ function decodeHeaderValue(str) {
   if (!str) return str;
   try {
     return decodeURIComponent(escape(str));
-  } catch (e) {
+  } catch {
     return str;
   }
 }
@@ -41,11 +40,12 @@ function getFilenameFromContentDisposition(header) {
 
   const filenameStarRegex = /filename\*=(?:utf-8|ascii)''([^;]+)/i;
   const starMatch = header.match(filenameStarRegex);
-  if (starMatch && starMatch[1]) {
+  if (starMatch && starMatch[1])
     try {
       return decodeURIComponent(starMatch[1].trim());
-    } catch (e) {}
-  }
+    } catch {
+      /* filename-star decode failure; fall through */
+    }
 
   const filenameQuotedRegex = /filename="([^"\\]*(?:\\.[^"\\]*)*)"/i;
   const quotedMatch = header.match(filenameQuotedRegex);
@@ -66,19 +66,19 @@ function getFilenameFromContentDisposition(header) {
 
 function getFilenameFromUrl(url) {
   if (!url) return "download";
-  
+
   let j = url.indexOf("?");
   if (j === -1) j = url.indexOf("#");
   if (j === -1) j = url.length;
 
   let i = url.lastIndexOf("/", j);
   let name = url.slice(i + 1, j);
-  
+
   if (!name) return "download";
 
   try {
     return decodeURIComponent(name);
-  } catch (e) {
+  } catch {
     return name;
   }
 }
@@ -87,8 +87,7 @@ function toQueryString(obj) {
   let parts = [];
   for (let [key, values] of Object.entries(obj))
     if (Array.isArray(values))
-      for (let value of values)
-        parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+      for (let value of values) parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
     else parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(values)}`);
 
   return parts.join("&");
@@ -133,7 +132,7 @@ function generateCurl(url, method, headers, payload, filename, options) {
   if (method !== "GET" || payload) parts.push(`--request ${method}`);
 
   if (payload)
-    if (payload.formData) {
+    if (payload.formData)
       if (contentType === "application/x-www-form-urlencoded")
         for (let [key, values] of Object.entries(payload.formData))
           for (let value of values) {
@@ -146,7 +145,6 @@ function generateCurl(url, method, headers, payload, filename, options) {
             let v = esc(`${encodeURIComponent(key)}=${value}`, options.doubleQuotes);
             parts.push(`--form-string ${v}`);
           }
-    }
 
   parts.push(esc(escapeGlobbing(url), options.doubleQuotes));
 
@@ -191,15 +189,13 @@ function generateWget(url, method, headers, payload, filename, options) {
   if (method !== "GET" || payload) parts.push(`--method ${method}`);
 
   if (payload)
-    if (payload.formData) {
+    if (payload.formData)
       if (contentType === "application/x-www-form-urlencoded")
         parts.push(`--body-data ${esc(toQueryString(payload.formData))}`);
-    }
 
   parts.push(esc(url, options.doubleQuotes));
 
-  if (filename)
-    parts.push(`--output-document ${esc(filename, options.doubleQuotes)}`);
+  if (filename) parts.push(`--output-document ${esc(filename, options.doubleQuotes)}`);
 
   if (options.wgetOptions) parts.push(options.wgetOptions);
 
@@ -257,8 +253,8 @@ function generate(url, method, headers, payload, filename, options) {
 // Chrome MV3: typeof window === "undefined" (pure service worker)
 // Firefox MV3: background.scripts loads at _generated_background_page.html
 // ----------------------------------------------------
-const _isBackground = typeof window === "undefined" ||
-  (typeof location !== "undefined" && location.pathname !== "/popup.html");
+const _isBackground =
+  typeof window === "undefined" || (typeof location !== "undefined" && location.pathname !== "/popup.html");
 if (_isBackground) {
   const MAX_ITEMS = 10;
   const currentRequests = new Map();
@@ -274,45 +270,40 @@ if (_isBackground) {
 
   const clearDownloads = async () => {
     await ext.storage.local.remove("_cliget_downloads");
-    if (extAction && extAction.setBadgeText) {
-      extAction.setBadgeText({ text: "" });
-    }
+    if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text: "" });
   };
 
   const saveToDownloads = async (request) => {
     let downloads = await getDownloads();
-    if (downloads.some(d => d.url === request.url && Math.abs(d.timestamp - request.timestamp) < 5000)) {
-      return;
-    }
+    if (downloads.some((d) => d.url === request.url && Math.abs(d.timestamp - request.timestamp) < 5000)) return;
+
     downloads.push(request);
     if (downloads.length > MAX_ITEMS) downloads = downloads.slice(-MAX_ITEMS);
     await saveDownloads(downloads);
     await ext.storage.local.set({ selectedDownloadId: request.id });
 
-    if (extAction && extAction.getBadgeText) {
+    if (extAction && extAction.getBadgeText)
       extAction.getBadgeText({}).then((txt) => {
         let num = parseInt(txt, 10) || 0;
         extAction.setBadgeText({ text: `${num + 1}` });
       });
-    }
   };
 
   const beforeRequestCallback = (details) => {
     if (details.tabId >= 0) {
       const now = Date.now();
-      
+
       let payload = details.requestBody;
-      if (payload && payload.raw) {
+      if (payload && payload.raw)
         payload = {
           formData: payload.formData,
-          raw: payload.raw.map(part => {
-            if (part.bytes && part.bytes.byteLength > 65536) {
+          raw: payload.raw.map((part) => {
+            if (part.bytes && part.bytes.byteLength > 65536)
               return { bytes: part.bytes.slice(0, 65536), truncated: true };
-            }
+
             return part;
           })
         };
-      }
 
       currentRequests.set(details.requestId, {
         id: details.requestId,
@@ -320,9 +311,9 @@ if (_isBackground) {
         url: details.url,
         type: details.type,
         timestamp: now,
-        payload: payload,
+        payload: payload
       });
-      
+
       if (currentRequests.size > 150) {
         const oldestKey = currentRequests.keys().next().value;
         currentRequests.delete(oldestKey);
@@ -332,9 +323,7 @@ if (_isBackground) {
 
   const sendHeadersCallback = (details) => {
     const req = currentRequests.get(details.requestId);
-    if (req) {
-      req.headers = details.requestHeaders;
-    }
+    if (req) req.headers = details.requestHeaders;
   };
 
   const responseStartedCallback = (details) => {
@@ -343,10 +332,12 @@ if (_isBackground) {
 
     currentRequests.delete(details.requestId);
 
-    let contentType, contentDisposition, size = 0;
+    let contentType,
+      contentDisposition,
+      size = 0;
     let filename = "";
 
-    if (details.responseHeaders) {
+    if (details.responseHeaders)
       for (let header of details.responseHeaders) {
         let headerName = header.name.toLowerCase();
         if (headerName === "content-type") {
@@ -358,11 +349,8 @@ if (_isBackground) {
           size = parseInt(header.value || "0", 10);
         }
       }
-    }
 
-    if (!filename) {
-      filename = getFilenameFromUrl(request.url);
-    }
+    if (!filename) filename = getFilenameFromUrl(request.url);
 
     request.filename = filename;
     request.size = size;
@@ -373,50 +361,31 @@ if (_isBackground) {
       const isAttachment = contentDisposition && contentDisposition.includes("attachment");
       let isDownload = false;
 
-      if (isAttachment) {
-        isDownload = true;
-      } else if (contentType) {
+      if (isAttachment) isDownload = true;
+      else if (contentType)
         if (
           !contentType.includes("text/html") &&
           !contentType.includes("text/plain") &&
           !contentType.includes("application/xhtml") &&
           !contentType.includes("application/xml") &&
           !contentType.includes("image/")
-        ) {
+        )
           isDownload = true;
-        }
-      }
 
-      if (isDownload) {
-        saveToDownloads(request);
-      }
+      if (isDownload) saveToDownloads(request);
     }
   };
 
   // Register WebRequest listeners for cliget downloads interception
   const filter = { urls: ["<all_urls>"], types: ["main_frame", "sub_frame"] };
 
-  ext.webRequest.onBeforeRequest.addListener(
-    beforeRequestCallback,
-    filter,
-    ["requestBody"]
-  );
+  ext.webRequest.onBeforeRequest.addListener(beforeRequestCallback, filter, ["requestBody"]);
 
-  ext.webRequest.onSendHeaders.addListener(
-    sendHeadersCallback,
-    filter,
-    ["requestHeaders"]
-  );
+  ext.webRequest.onSendHeaders.addListener(sendHeadersCallback, filter, ["requestHeaders"]);
 
-  ext.webRequest.onResponseStarted.addListener(
-    responseStartedCallback,
-    filter,
-    ["responseHeaders"]
-  );
+  ext.webRequest.onResponseStarted.addListener(responseStartedCallback, filter, ["responseHeaders"]);
 
-  if (extAction && extAction.setBadgeBackgroundColor) {
-    extAction.setBadgeBackgroundColor({ color: "#4a90d9" });
-  }
+  if (extAction && extAction.setBadgeBackgroundColor) extAction.setBadgeBackgroundColor({ color: "#4a90d9" });
 
   // Handle cliget popup request commands
   ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -438,13 +407,9 @@ if (_isBackground) {
           return;
         }
 
-        const excludeHeaders = (options.excludeHeaders || "")
-          .split(" ")
-          .map((h) => h.toLowerCase());
+        const excludeHeaders = (options.excludeHeaders || "").split(" ").map((h) => h.toLowerCase());
 
-        const headers = (request.headers || []).filter(
-          (h) => excludeHeaders.indexOf(h.name.toLowerCase()) === -1
-        );
+        const headers = (request.headers || []).filter((h) => excludeHeaders.indexOf(h.name.toLowerCase()) === -1);
 
         try {
           const cmd = generate(
@@ -461,16 +426,14 @@ if (_isBackground) {
         }
       };
 
-      if (typeof requestOrId === "object" && requestOrId !== null) {
-        proceedWithRequest(requestOrId);
-      } else if (requestOrId) {
-        getDownloads().then(downloads => {
-          let request = downloads.find(r => r.id === requestOrId);
+      if (typeof requestOrId === "object" && requestOrId !== null) proceedWithRequest(requestOrId);
+      else if (requestOrId)
+        getDownloads().then((downloads) => {
+          let request = downloads.find((r) => r.id === requestOrId);
           proceedWithRequest(request);
         });
-      } else {
-        proceedWithRequest(null);
-      }
+      else proceedWithRequest(null);
+
       return true;
     }
   });
@@ -528,9 +491,7 @@ globalThis.registerPlugin({
     const { refresh } = context;
 
     // Clear the badge whenever this plugin's panel is opened
-    if (extAction && extAction.setBadgeText) {
-      extAction.setBadgeText({ text: "" });
-    }
+    if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text: "" });
 
     // Local fileSizeToText helper
     const fileSizeToText = (size) => {
@@ -552,7 +513,7 @@ globalThis.registerPlugin({
     let selectedDownloadId = stored.selectedDownloadId;
 
     if (currentDownloads.length > 0) {
-      if (!selectedDownloadId || !currentDownloads.some(d => d.id === selectedDownloadId)) {
+      if (!selectedDownloadId || !currentDownloads.some((d) => d.id === selectedDownloadId)) {
         selectedDownloadId = currentDownloads[currentDownloads.length - 1].id;
         await ext.storage.local.set({ selectedDownloadId });
       }
@@ -576,7 +537,7 @@ globalThis.registerPlugin({
     const storedOptions = await ext.storage.local.get();
     const options = Object.assign({}, defaults, storedOptions);
 
-    const request = currentDownloads.find(r => r.id === selectedDownloadId);
+    const request = currentDownloads.find((r) => r.id === selectedDownloadId);
     const activeOptions = Object.assign({}, options, { command: "cliget" });
     const cmd = request ? await ext.runtime.sendMessage(["cliget:generateCommand", request, activeOptions]) : "";
 
@@ -596,9 +557,8 @@ globalThis.registerPlugin({
       opt.value = req.id;
       let sizeText = req.size ? ` (${fileSizeToText(req.size)})` : "";
       opt.textContent = `${req.filename || "Untitled"}${sizeText}`;
-      if (req.id === selectedDownloadId) {
-        opt.selected = true;
-      }
+      if (req.id === selectedDownloadId) opt.selected = true;
+
       pickerSelect.appendChild(opt);
     }
 
@@ -630,17 +590,16 @@ globalThis.registerPlugin({
     const copyBtn = document.createElement("button");
     copyBtn.className = "btn btn-blue btn-full";
     copyBtn.textContent = "Copy Command";
-    if (!cmd) {
-      copyBtn.disabled = true;
-    } else {
+    if (!cmd) copyBtn.disabled = true;
+    else
       copyBtn.onclick = () => {
         navigator.clipboard.writeText(cmd).then(() => {
           const oldText = copyBtn.textContent;
           copyBtn.textContent = "Copied!";
-          setTimeout(() => copyBtn.textContent = oldText, 2000);
+          setTimeout(() => (copyBtn.textContent = oldText), 2000);
         });
       };
-    }
+
     nav.appendChild(copyBtn);
     panel.appendChild(nav);
 
@@ -687,13 +646,11 @@ globalThis.registerPlugin({
 
     // Custom Options Inputs (dynamically generated from plugin definition)
     const customInputs = this.customInputs || [];
-    customInputs.forEach(inputMeta => {
+    customInputs.forEach((inputMeta) => {
       if (inputMeta.dependsOn) {
         const depKey = inputMeta.dependsOn.key;
         const depValue = inputMeta.dependsOn.value;
-        if (options[depKey] !== depValue) {
-          return;
-        }
+        if (options[depKey] !== depValue) return;
       }
 
       if (inputMeta.type === "text") {
@@ -701,7 +658,7 @@ globalThis.registerPlugin({
         labelEl.className = "text-input-label";
         labelEl.style.marginTop = "8px";
         labelEl.appendChild(document.createTextNode(inputMeta.label));
-        
+
         const inputEl = document.createElement("input");
         inputEl.type = "text";
         inputEl.value = options[inputMeta.key] || "";
@@ -718,7 +675,7 @@ globalThis.registerPlugin({
         const checkboxLabel = document.createElement("label");
         checkboxLabel.className = "checkbox-label";
         checkboxLabel.style.marginTop = "8px";
-        
+
         const inputEl = document.createElement("input");
         inputEl.type = "checkbox";
         inputEl.checked = !!options[inputMeta.key];
@@ -738,13 +695,12 @@ globalThis.registerPlugin({
         labelEl.appendChild(document.createTextNode(inputMeta.label));
 
         const selectEl = document.createElement("select");
-        (inputMeta.options || []).forEach(opt => {
+        (inputMeta.options || []).forEach((opt) => {
           const optEl = document.createElement("option");
           optEl.value = opt.value;
           optEl.textContent = opt.name || opt.value;
-          if (options[inputMeta.key] === opt.value) {
-            optEl.selected = true;
-          }
+          if (options[inputMeta.key] === opt.value) optEl.selected = true;
+
           selectEl.appendChild(optEl);
         });
 

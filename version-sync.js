@@ -12,9 +12,7 @@ try {
 
   // Align version and description
   manifest.version = pkg.version;
-  if (pkg.description) {
-    manifest.description = pkg.description;
-  }
+  if (pkg.description) manifest.description = pkg.description;
 
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   console.log(`Version synced successfully to manifest.json: ${pkg.version}`);

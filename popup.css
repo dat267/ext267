@@ -241,3 +241,12 @@ textarea:focus {
   background-color: var(--secondary-bg);
   border-bottom: 1px solid var(--border-color);
 }
+
+@keyframes recording-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.recording-indicator {
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}

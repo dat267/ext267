@@ -19,7 +19,8 @@
   ],
   "background": {
     "scripts": [
-      "plugins/cliget.js"
+      "plugins/cliget.js",
+      "plugins/recorder.js"
     ]
   },
   "action": {

@@ -14,9 +14,7 @@ async function init() {
 
   // Restore last selected plugin from plain localStorage
   let lastActive = localStorage.getItem("lastActiveTab");
-  if (!lastActive || !plugins.some(p => p.id === lastActive)) {
-    lastActive = plugins[0].id;
-  }
+  if (!lastActive || !plugins.some((p) => p.id === lastActive)) lastActive = plugins[0].id;
 
   buildSelector(plugins, lastActive);
 }
@@ -32,7 +30,7 @@ function buildSelector(plugins, startPlugin) {
   } else {
     if (header) header.style.display = "";
     selector.innerHTML = "";
-    plugins.forEach(plugin => {
+    plugins.forEach((plugin) => {
       const opt = document.createElement("option");
       opt.value = plugin.id;
       opt.textContent = plugin.name || plugin.id;
@@ -60,7 +58,7 @@ async function renderPanel(pluginId) {
   const plugin = globalThis.Plugins.get(pluginId);
   if (!plugin) return;
 
-  if (typeof plugin.render === "function") {
+  if (typeof plugin.render === "function")
     try {
       await plugin.render(panel, { refresh: () => renderPanel(pluginId) });
     } catch (err) {
@@ -71,7 +69,6 @@ async function renderPanel(pluginId) {
       panel.appendChild(errDiv);
       console.error(`[ext267] Plugin "${pluginId}" render error:`, err);
     }
-  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

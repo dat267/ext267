@@ -30,7 +30,7 @@ try {
   // Copy built file to ext267.xpi
   const builtZipPath = path.join(__dirname, "web-ext-artifacts", `ext267-${uniqueVersion}.zip`);
   const targetXpiPath = path.join(__dirname, "web-ext-artifacts", "ext267.xpi");
-  
+
   if (fs.existsSync(builtZipPath)) {
     fs.copyFileSync(builtZipPath, targetXpiPath);
     console.log(`Successfully packaged ${builtZipPath} to ${targetXpiPath}`);
