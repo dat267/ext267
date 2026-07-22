@@ -52,4 +52,4 @@ npm run build    # package signed XPI
 
 ## CI/CD
 
-A GitHub Actions pipeline at `.github/workflows/amo-publish.yml` handles AMO signing. Trigger by pushing a `v*` tag or manually from the Actions tab. Requires `AMO_API_KEY` and `AMO_API_SECRET` repository secrets.
+A GitHub Actions pipeline at `.github/workflows/amo-publish.yml` handles AMO signing. Trigger by pushing a `v*` tag (defaults to **unlisted** for self-distribution) or manually from the Actions tab. Requires `AMO_API_KEY` and `AMO_API_SECRET` repository secrets.

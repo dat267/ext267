@@ -9,7 +9,7 @@ on:
       channel:
         description: 'Signing channel (listed or unlisted)'
         required: true
-        default: 'listed'
+        default: 'unlisted'
         type: choice
         options:
           - listed
@@ -41,7 +41,7 @@ jobs:
           AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
           AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
           # Default to 'listed' if triggered by a tag push, or use user input on manual dispatch
-          CHANNEL: ${{ github.event.inputs.channel || 'listed' }}
+          CHANNEL: ${{ github.event.inputs.channel || 'unlisted' }}
         run: |
           if [ -z "$AMO_API_KEY" ] || [ -z "$AMO_API_SECRET" ]; then
             echo "::warning::AMO_API_KEY or AMO_API_SECRET secrets are not configured. Skipping signing step."

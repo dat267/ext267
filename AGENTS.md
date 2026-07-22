@@ -164,7 +164,7 @@ For the pipeline to work, configure the following **Repository Secrets** in your
 
 ### Workflow Behavior
 1. **Trigger Options**:
-   * **Tag Pushes**: Runs automatically when a tag matching `v*` is pushed. By default, it submits to the **listed** channel.
+   * **Tag Pushes**: Runs automatically when a tag matching `v*` is pushed. Submits to the **unlisted** channel for self-distribution.
    * **Manual Dispatch**: Can be triggered manually from the GitHub Actions tab. Allows selecting between **listed** (AMO store release) and **unlisted** (self-distribution package) channels.
 2. **Execution Steps**:
    * Checks out the repository.
