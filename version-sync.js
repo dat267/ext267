@@ -10,9 +10,10 @@ try {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
-  // Align version and description
+  // Align version, description, and license
   manifest.version = pkg.version;
   if (pkg.description) manifest.description = pkg.description;
+  if (pkg.license) manifest.license = pkg.license;
 
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   console.log(`Version synced successfully to manifest.json: ${pkg.version}`);
