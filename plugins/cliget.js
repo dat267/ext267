@@ -29,7 +29,13 @@ function escapeShellArg(arg, doubleQuotes) {
 function decodeHeaderValue(str) {
   if (!str) return str;
   try {
-    return decodeURIComponent(escape(str));
+    return decodeURIComponent(
+      str.replace(/[\u0080-\uffff]/g, (ch) => {
+        let hex = ch.charCodeAt(0).toString(16);
+        while (hex.length < 2) hex = "0" + hex;
+        return "%" + hex;
+      })
+    );
   } catch {
     return str;
   }

@@ -1,6 +1,6 @@
 # Project Overview: ext267
 
-**ext267** is a modernized, responsive, extensible browser toolkit with a plugin-based architecture. It ships with two plugins: **cliget** (download interception → CLI command generation) and **Activity Recorder** (network activity capture → AI-friendly Markdown/JSON export).
+**ext267** is a modernized, responsive, extensible browser toolkit with a plugin-based architecture. It ships with one plugin: **cliget** (download interception → CLI command generation).
 
 ### Main Technologies
 - **Platform**: Browser WebExtension (Manifest V3 compatible).
@@ -11,7 +11,7 @@
 ### Core Architecture
 - **Plugin-based Extensible Tools**: Each plugin registers itself dynamically in both popup and background scopes via a standard `registerPlugin` registry map. Plugins do not rely on shared scripts like `utils.js` or `background.js`.
 - **Dynamic Popup UI Selector**: The popup selector is built dynamically in [popup.js](file:///home/dat/repos/ext267/popup.js) by mapping registered plugin metadata from the global map.
-- **Decoupled Plugin Execution**: Plugins run as completely self-contained entities. If a plugin requires background listeners (such as downloads interception or request recording via webRequest APIs) or utility helpers (like shell escaping), all that logic resides inside the plugin file itself (e.g. [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js), [recorder.js](file:///home/dat/repos/ext267/plugins/recorder.js)), isolated behind the `_isBackground` guard. Each plugin file defines its own `ext` at file scope and does not rely on shared globals from other scripts.
+- **Decoupled Plugin Execution**: Plugins run as completely self-contained entities. If a plugin requires background listeners (such as downloads interception via webRequest APIs) or utility helpers (like shell escaping), all that logic resides inside the plugin file itself (e.g. [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js)), isolated behind the `_isBackground` guard. Each plugin file defines its own `ext` at file scope and does not rely on shared globals from other scripts.
 - **Self-Contained Dynamic Interfaces**: Each plugin panel dynamically registers and builds its own layout. If it uses custom rendering (via the `render(panel, context)` hook), it draws all forms, picker select lists, options inputs, output textareas, and buttons locally.
 
 ### Plugins
@@ -19,7 +19,6 @@
 | Plugin | Type | Purpose |
 |--------|------|---------|
 | [cliget.js](file:///home/dat/repos/ext267/plugins/cliget.js) | Download-intercepting | Intercepts main_frame/sub_frame downloads and generates curl/wget/aria2c commands |
-| [recorder.js](file:///home/dat/repos/ext267/plugins/recorder.js) | Request-intercepting | Captures ALL network requests across tabs and exports as Markdown or JSON |
 
 ---
 
@@ -31,7 +30,6 @@ To maintain extension performance, stability, and compatibility on both desktop 
 * **Why**: Continuous tracking of non-document resources drains system resources.
 * **Standard**: Inside the `_isBackground` guard of plugins that use webRequest, listeners must be statically registered synchronously at startup. The `types` filter must be as narrow as the plugin requires:
   * **cliget** (download interception): `["main_frame", "sub_frame"]` only.
-  * **recorder** (network capture): all types (no filter) since it needs to record everything, including XHR/fetch API calls.
 
 ### 2. Stateless MV3 Message Passing
 * **Why**: Manifest V3 background service workers are ephemeral and will suspend when idle. Keeping request objects only in background memory and looking them up via IDs from the popup will fail if the background worker has recycled.
@@ -49,7 +47,7 @@ To maintain extension performance, stability, and compatibility on both desktop 
 
 ### 4. Redirect & Error Handling in webRequest Pipelines
 * **Why**: Redirected requests fire `onBeforeRedirect` instead of `onCompleted`. Failed requests fire `onErrorOccurred`. Without handling these, pending request entries accumulate and leak memory.
-* **Standard**: Always register listeners for `onBeforeRedirect` (clean up pending entries) and `onErrorOccurred` (finalize + clean up). See `recorder.js` background section for the pattern.
+* **Standard**: Always register listeners for `onBeforeRedirect` (clean up pending entries) and `onErrorOccurred` (finalize + clean up).
 
 ### 5. Plugin Registry Standards
 * **Why**: To keep the extension codebase modular and decoupled from specific plugins, allowing new tools to be added with zero changes to popup or background core scripts.
@@ -98,10 +96,6 @@ To maintain extension performance, stability, and compatibility on both desktop 
   ```
 
 * **`render(panel, context)` context shape**: `{ refresh }` only. The popup shell passes no extension APIs — each plugin is responsible for its own `ext` variable defined at file scope.
-
-### 6. Session Storage for MV3 Resilience
-* **Why**: Background service workers can be terminated at any time. In-memory recording state is lost on restart.
-* **Standard**: Persist session-scoped state to `ext.storage.session` (10MB limit, cleared on browser restart). On startup, restore state from `_recorder_status` / `_recorder_session` keys. See `recorder.js` for the pattern.
 
 ---
 

@@ -11,11 +11,6 @@ Useful for downloading login-protected files (email attachments, private repos, 
 
 *Windows users*: Enable the "Escape with double-quotes" option (cmd.exe doesn't support single quotes). Cygwin users can keep the default.
 
-### Activity Recorder
-Record all browser network activity to reverse-engineer website functionality. Captures every request's URL, method, headers, request body, status code, content-type, and timing — grouped by page navigation. Export as **AI-friendly Markdown** (structured by domain, with header tables and body code blocks) or raw **JSON**.
-
-Ideal for generating API documentation, implementing automated processing in Go/Python/JavaScript, or feeding context to coding agents.
-
 ---
 
 ## Developer Guide
@@ -26,7 +21,7 @@ This extension uses a self-registering plugin system. Each plugin is fully self-
 
 **Download-intercepting** (like cliget) — uses the `_isBackground` guard to register `webRequest` listeners in the background context, communicates with the popup via namespaced messages.
 
-**Standalone** (like the recorder) — all logic lives in `render(panel, context)`. Can use `ext.*` APIs directly.
+**Standalone** — all logic lives in `render(panel, context)`. Can use `ext.*` APIs directly.
 
 ### Adding a New Plugin
 
