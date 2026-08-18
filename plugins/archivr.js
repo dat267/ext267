@@ -17,7 +17,10 @@ const isBackground = !isPopup && !isContentScript;
 if (isBackground) {
   ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     void sender;
+    if (!Array.isArray(msg) || typeof msg[0] !== "string" || !msg[0].startsWith("archivr:")) return false;
+
     sendResponse(null);
+    return true;
   });
   if (ext.runtime.onStartup) ext.runtime.onStartup.addListener(() => {});
 }

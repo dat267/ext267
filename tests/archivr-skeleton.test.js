@@ -31,6 +31,36 @@ test("archivr stays inert in background context and registers no plugin", () => 
   assert.equal(ctx.Plugins, undefined);
 });
 
+test("archivr background listener only responds to archivr: messages", () => {
+  let captured;
+  const runtime = {
+    onMessage: {
+      addListener(fn) {
+        captured = fn;
+      }
+    },
+    onStartup: { addListener() {} }
+  };
+  loadArchivr({ browser: { runtime, action: {} }, console });
+  assert.ok(captured, "background onMessage listener is registered");
+
+  let responded = 0;
+  const sendResponse = () => {
+    responded++;
+  };
+
+  // Non-archivr messages must not be swallowed (cliget depends on this).
+  assert.equal(captured(["cliget:getDownloadList"], {}, sendResponse), false);
+  assert.equal(captured(["cliget:generateCommand"], {}, sendResponse), false);
+  assert.equal(captured("cliget:getDownloadList", {}, sendResponse), false);
+  assert.equal(captured([123], {}, sendResponse), false);
+  assert.equal(captured([], {}, sendResponse), false);
+  assert.equal(responded, 0);
+
+  assert.equal(captured(["archivr:ping"], {}, sendResponse), true);
+  assert.equal(responded, 1);
+});
+
 test("archivr-content stays inert in non-page contexts", () => {
   const sandbox = { browser: {}, location: { protocol: "moz-extension:", pathname: "/popup.html" }, console };
   const ctx = vm.createContext(sandbox);
