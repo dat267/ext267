@@ -1,6 +1,5 @@
 "use strict";
 
-// eslint-disable-next-line no-unused-vars
 function cleanName(title) {
   let t = String(title || "")
     // eslint-disable-next-line no-control-regex
@@ -11,7 +10,6 @@ function cleanName(title) {
   return t.slice(0, 120);
 }
 
-// eslint-disable-next-line no-unused-vars
 function uniqueNames(names) {
   const seen = new Map();
   return names.map((name) => {
@@ -281,7 +279,6 @@ function toHtml(doc) {
   return "<!DOCTYPE html>\n" + doc.outerHTML;
 }
 
-// eslint-disable-next-line no-unused-vars
 async function serializePage({ html, baseUri }, fetcher) {
   const doc = parseHtml(html, new DOMParser());
   const state = { cache: new Map(), cssImports: new Set() };
@@ -295,6 +292,89 @@ async function serializePage({ html, baseUri }, fetcher) {
   const head = doc.querySelector("head") || doc.documentElement;
   head.insertBefore(base, head.firstChild || null);
   return toHtml(doc);
+}
+
+// ---- Archive builder (popup path; globalThis.TurndownService and
+// ---- globalThis.turndownPluginGfm are referenced lazily so this file can also
+// ---- load in the background where those libraries do not exist) ----
+
+function htmlToMarkdown(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const service = new globalThis.TurndownService({
+    headingStyle: "atx",
+    codeBlockStyle: "fenced",
+    bulletListMarker: "-"
+  });
+  if (globalThis.turndownPluginGfm && globalThis.turndownPluginGfm.gfm) service.use(globalThis.turndownPluginGfm.gfm);
+
+  return service.turndown(doc.body || doc.documentElement);
+}
+
+function makeReadme(entries) {
+  const lines = [
+    "ext267 Archivr export",
+    "=====================",
+    `Saved: ${new Date().toISOString()}`,
+    `Pages: ${entries.length}`,
+    "",
+    "Each numbered folder contains a self-contained index.html (resources",
+    "inlined as data URIs) and a page.md version of the captured page.",
+    ""
+  ];
+  entries.forEach((e, i) => {
+    lines.push(`${String(i + 1).padStart(2, "0")}. ${e.title || "(untitled)"} ${e.url}`);
+  });
+  return lines.join("\n") + "\n";
+}
+
+function archiveFilename() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `ext267-archive-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}` +
+    `-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.zip`
+  );
+}
+
+// eslint-disable-next-line no-unused-vars
+function bytesToBase64(bytes) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+
+  return btoa(bin);
+}
+
+// eslint-disable-next-line no-unused-vars
+async function buildArchive(entries, fetcher, opts = {}) {
+  const dirName = opts.dirName || archiveFilename().replace(/\.zip$/, "");
+  const serialize = opts.serializePage || serializePage;
+  const mdFn = opts.mdFn || htmlToMarkdown;
+  const folders = uniqueNames(entries.map((e) => cleanName(e.title)));
+  const files = [];
+  const manifestEntries = [];
+
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const folder = `${dirName}/${String(i + 1).padStart(2, "0")} - ${folders[i]}`;
+    const serialized = await serialize({ html: e.html, baseURI: e.baseURI }, fetcher);
+    files.push({ name: `${folder}/index.html`, data: serialized });
+    files.push({ name: `${folder}/page.md`, data: mdFn(e.html) });
+    manifestEntries.push({
+      title: e.title || "",
+      url: e.url,
+      ts: e.ts,
+      html: `${folder}/index.html`,
+      md: `${folder}/page.md`
+    });
+  }
+
+  files.push({
+    name: `${dirName}/manifest.json`,
+    data: JSON.stringify({ savedAt: Date.now(), count: entries.length, entries: manifestEntries }, null, 2)
+  });
+  files.push({ name: `${dirName}/README.txt`, data: makeReadme(entries) });
+
+  return globalThis.zipBytes(files);
 }
 
 const ext = typeof browser !== "undefined" ? browser : chrome;
