@@ -383,8 +383,11 @@ async function buildArchive(entries, fetcher, opts = {}) {
   return globalThis.zipBytes(files);
 }
 
-const ext = typeof browser !== "undefined" ? browser : chrome;
-const extAction = ext.action || ext.browserAction;
+// NOTE: top-level bindings are deliberately NOT named `ext`/`extAction` —
+// cliget.js declares those names in the shared global lexical environment and a
+// duplicate `const` would throw a SyntaxError in whichever script parses second.
+const archivrExt = typeof browser !== "undefined" ? browser : chrome;
+const archivrExtAction = archivrExt.action || archivrExt.browserAction;
 
 // Context detection:
 // - background: Chrome MV3 has no window; Firefox event page has window but its
@@ -500,13 +503,14 @@ if (isBackground) {
         });
       },
       async count() {
+        await ensureReady();
         return inMemory.count();
       }
     };
   }
 
   const setBadge = (text) => {
-    if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text });
+    if (archivrExtAction && archivrExtAction.setBadgeText) archivrExtAction.setBadgeText({ text });
   };
 
   const store =
@@ -545,7 +549,7 @@ if (isBackground) {
           type: "application/zip"
         })
       );
-      const id = await ext.downloads.download({
+      const id = await archivrExt.downloads.download({
         url: blobUrl,
         filename,
         saveAs: false,
@@ -558,7 +562,7 @@ if (isBackground) {
     return false;
   };
 
-  ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  archivrExt.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     void sender;
     if (!Array.isArray(msg) || typeof msg[0] !== "string" || !msg[0].startsWith("archivr:")) return false;
     handle(msg, sendResponse)
@@ -573,8 +577,8 @@ if (isBackground) {
     return true; // keep the channel open for async responses
   });
 
-  if (ext.runtime.onStartup)
-    ext.runtime.onStartup.addListener(() => {
+  if (archivrExt.runtime.onStartup)
+    archivrExt.runtime.onStartup.addListener(() => {
       store.clear().catch(() => {});
     });
 
@@ -602,10 +606,10 @@ if (isPopup) {
     defaultOptions: { enabled: false },
     render: async function (panel, context) {
       const { refresh } = context;
-      if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text: "" });
-      ext.runtime.sendMessage(["archivr:clearBadge"]).catch(() => {});
+      if (archivrExtAction && archivrExtAction.setBadgeText) archivrExtAction.setBadgeText({ text: "" });
+      archivrExt.runtime.sendMessage(["archivr:clearBadge"]).catch(() => {});
 
-      const settings = await ext.storage.local.get(["archivr.enabled"]).catch(() => ({}));
+      const settings = await archivrExt.storage.local.get(["archivr.enabled"]).catch(() => ({}));
       const enabled = !!settings["archivr.enabled"];
 
       const toggleLabel = document.createElement("label");
@@ -614,14 +618,14 @@ if (isPopup) {
       toggle.type = "checkbox";
       toggle.checked = enabled;
       toggle.onchange = async (e) => {
-        await ext.storage.local.set({ "archivr.enabled": e.target.checked }).catch(() => {});
+        await archivrExt.storage.local.set({ "archivr.enabled": e.target.checked }).catch(() => {});
         refresh();
       };
       toggleLabel.appendChild(toggle);
       toggleLabel.appendChild(document.createTextNode("Auto-capture pages this session"));
       panel.appendChild(toggleLabel);
 
-      const list = (await ext.runtime.sendMessage(["archivr:list"]).catch(() => null)) || [];
+      const list = (await archivrExt.runtime.sendMessage(["archivr:list"]).catch(() => null)) || [];
       if (list.length === 0) {
         const empty = document.createElement("div");
         empty.className = "empty-state";
@@ -688,13 +692,13 @@ if (isPopup) {
         try {
           const ids = Array.from(selection);
           if (ids.length === 0) return;
-          const records = (await ext.runtime.sendMessage(["archivr:getRecords", ids]).catch(() => null)) || [];
+          const records = (await archivrExt.runtime.sendMessage(["archivr:getRecords", ids]).catch(() => null)) || [];
           const bytes = await buildArchive(
             records.filter((r) => r && r.html),
             defaultFetcher,
             {}
           );
-          await ext.runtime.sendMessage([
+          await archivrExt.runtime.sendMessage([
             "archivr:download",
             { bytesBase64: bytesToBase64(bytes), filename: archiveFilename() }
           ]);
@@ -715,7 +719,7 @@ if (isPopup) {
       clearBtn.className = "btn btn-red btn-full";
       clearBtn.textContent = "Clear session";
       clearBtn.onclick = async () => {
-        await ext.runtime.sendMessage(["archivr:clear"]).catch(() => {});
+        await archivrExt.runtime.sendMessage(["archivr:clear"]).catch(() => {});
         refresh();
       };
       panel.appendChild(clearBtn);
