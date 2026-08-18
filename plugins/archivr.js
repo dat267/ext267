@@ -356,7 +356,7 @@ async function buildArchive(entries, fetcher, opts = {}) {
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     const folder = `${dirName}/${String(i + 1).padStart(2, "0")} - ${folders[i]}`;
-    const serialized = await serialize({ html: e.html, baseURI: e.baseURI }, fetcher);
+    const serialized = await serialize({ html: e.html, baseUri: e.baseURI }, fetcher);
     files.push({ name: `${folder}/index.html`, data: serialized });
     files.push({ name: `${folder}/page.md`, data: mdFn(e.html) });
     manifestEntries.push({
