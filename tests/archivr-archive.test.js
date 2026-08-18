@@ -95,7 +95,6 @@ function el(tag, attrs = {}) {
         .join("")}>${body}</${this.tag}>`;
     }
   };
-  elem.createElement = (tagName) => el(tagName);
   return elem;
 }
 

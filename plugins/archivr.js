@@ -100,7 +100,9 @@ function formatRelativeTime(ts) {
 // ---- globalThis.UglifyCSS are referenced lazily, never at module top level) ---
 
 function parseHtml(html, parser) {
-  return parser.parseFromString(html, "text/html").documentElement;
+  // Return the Document, not documentElement: downstream code calls
+  // Document-only methods (createElement) on the result.
+  return parser.parseFromString(html, "text/html");
 }
 
 function absolutizeStyleUrls(styleText, baseUri) {
@@ -278,7 +280,8 @@ function stripScripts(doc) {
 }
 
 function toHtml(doc) {
-  return "<!DOCTYPE html>\n" + doc.outerHTML;
+  // doc is a Document; serialize its root element.
+  return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
 }
 
 async function serializePage({ html, baseUri }, fetcher) {
