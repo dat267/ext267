@@ -10,7 +10,7 @@ const commonRules = {
 };
 
 export default [
-  { ignores: ["**/node_modules/", "**/web-ext-artifacts/", "eslint.config.mjs"] },
+  { ignores: ["**/node_modules/", "**/web-ext-artifacts/", "eslint.config.mjs", "**/plugins/archivr-libs/"] },
 
   // Recommended rules for all JS files
   js.configs.recommended,
@@ -34,6 +34,7 @@ export default [
     files: [
       "build-package.js",
       "version-sync.js",
+      "tools/vendor-cjs.js",
       "tests/**/*.test.js"
     ],
     languageOptions: {
