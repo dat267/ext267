@@ -425,6 +425,23 @@ if (isBackground) {
         }
         return id;
       },
+      // Rebuild the in-memory index from persisted rows (used to rehydrate
+      // after an MV3 worker recycle). Rows carry `id` and `size`; the id
+      // sequence continues from the highest stored id so fresh adds never
+      // collide with persisted records.
+      async seed(rows) {
+        for (const row of rows) {
+          if (!row || typeof row.id !== "number") continue;
+          if (row.id > seq) seq = row.id;
+          records.set(row.id, row);
+          ordered.push(row.id);
+        }
+        ordered.sort((a, b) => b - a); // newest id first
+        while (ordered.length > MAX_LIST) {
+          const drop = ordered.pop();
+          records.delete(drop);
+        }
+      },
       async list() {
         return ordered.map((id) => {
           const r = records.get(id);
@@ -444,17 +461,19 @@ if (isBackground) {
     };
   }
 
-  function createIdbStore(dbName) {
+  function createIdbStore(dbName, backend) {
+    const idb = backend || (typeof indexedDB !== "undefined" ? indexedDB : null);
     let dbPromise = null;
+    let readyPromise = null;
+    const inMemory = createMemoryStore();
+
     const db = () => {
       if (dbPromise) return dbPromise;
       dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(dbName, 1);
+        const req = idb.open(dbName, 1);
         req.onupgradeneeded = () => {
-          if (!req.result.objectStoreNames.contains("captures")) {
-            req.result.createObjectStore("captures", { keyPath: "id", autoIncrement: true });
-            req.result.createObjectStore("index", { keyPath: "orderKey" });
-          }
+          if (req.result.objectStoreNames.contains("captures")) return;
+          req.result.createObjectStore("captures", { keyPath: "id", autoIncrement: true });
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
@@ -462,10 +481,34 @@ if (isBackground) {
       return dbPromise;
     };
 
-    const inMemory = createMemoryStore();
+    // MV3 background workers recycle when idle (Chrome ~30s, Firefox suspends
+    // event pages). The in-memory index is gone after a recycle, so rehydrate
+    // it from IDB on first use (newest first, capped at MAX_LIST) and continue
+    // the id sequence from the highest stored id.
+    const ensureReady = () => {
+      if (readyPromise) return readyPromise;
+      readyPromise = (async () => {
+        const objectStore = (await db()).transaction("captures", "readonly").objectStore("captures");
+        const rows = await new Promise((resolve, reject) => {
+          const collected = [];
+          const req = objectStore.openCursor(null, "prev"); // newest id first
+          req.onsuccess = () => {
+            const cursor = req.result;
+            if (!cursor) return resolve(collected);
+            collected.push(cursor.value);
+            if (collected.length < MAX_LIST) cursor.continue();
+            else resolve(collected);
+          };
+          req.onerror = () => reject(req.error);
+        });
+        await inMemory.seed(rows);
+      })();
+      return readyPromise;
+    };
 
     return {
       async add(rec) {
+        await ensureReady();
         const sized = Object.assign({}, rec, { size: (rec.html || "").length });
         const id = await inMemory.add(sized);
         if (id === null) return null;
@@ -478,6 +521,7 @@ if (isBackground) {
         return id;
       },
       async list() {
+        await ensureReady();
         return inMemory.list();
       },
       async getByIds(ids) {
