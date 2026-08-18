@@ -48,9 +48,7 @@ function loadPopup(sandbox) {
   return ctx;
 }
 
-test("render loads list, renders rows, and save triggers a download message", async () => {
-  const panel = makeElement("div");
-  const messages = [];
+function makeSandbox(messages) {
   const browser = {
     runtime: {
       onMessage: { addListener() {} },
@@ -75,7 +73,7 @@ test("render loads list, renders rows, and save triggers a download message", as
     action: { setBadgeText: async () => {} },
     storage: { local: { get: async () => ({}), set: async () => {} } }
   };
-  const sandbox = {
+  return {
     window: {},
     location: { protocol: "moz-extension:", pathname: "/popup.html" },
     browser,
@@ -87,20 +85,134 @@ test("render loads list, renders rows, and save triggers a download message", as
     Blob: class {},
     URL: { createObjectURL: () => "blob:fake", revokeObjectURL: () => {} }
   };
-  const ctx = loadPopup(sandbox);
+}
+
+function stubSteps(ctx) {
   // stub the heavy pure steps so the test stays fast
   ctx.buildArchive = async () => new Uint8Array([1, 2, 3]);
   ctx.bytesToBase64 = () => "AQID";
-  const plugin = ctx.Plugins.get("archivr");
-  await plugin.render(panel, { refresh: async () => {} });
+}
 
-  const checks = panel.children.filter((c) => c.tag === "label");
+function makePanelRunner(ctx) {
+  const plugin = ctx.Plugins.get("archivr");
+  const panel = makeElement("div");
+  let lastRefresh = null;
+  const refresh = () => {
+    panel.children = [];
+    lastRefresh = plugin.render(panel, { refresh });
+    return lastRefresh;
+  };
+  return {
+    panel,
+    refresh,
+    get lastRefresh() {
+      return lastRefresh;
+    }
+  };
+}
+
+function labelChildrenText(label) {
+  return label.children
+    .filter((c) => c.isText)
+    .map((c) => c.textContent)
+    .join("");
+}
+
+function findSelectAllInput(panel) {
+  const label = panel.children.find((c) => c.tag === "label" && labelChildrenText(c) === "Select all");
+  return label && label.children.find((c) => c.tag === "input");
+}
+
+function findRowCbs(panel) {
+  return panel.children
+    .filter(
+      (c) => c.tag === "label" && c.children.some((k) => k.tag === "input") && c.children.some((k) => k.tag === "span")
+    )
+    .map((c) => c.children.find((k) => k.tag === "input"));
+}
+
+function findSaveBtn(panel) {
+  return panel.children.find((c) => c.tag === "button" && /Save selected/.test(c.textContent));
+}
+
+test("render loads list, renders rows, and save triggers a download message", async () => {
+  const messages = [];
+  const ctx = loadPopup(makeSandbox(messages));
+  stubSteps(ctx);
+  const runner = makePanelRunner(ctx);
+  await runner.refresh();
+
+  const checks = runner.panel.children.filter((c) => c.tag === "label");
   assert.ok(checks.length >= 3, "toggle + select-all + 2 rows rendered");
 
-  const saveBtn = panel.children.find((c) => c.tag === "button" && /Save selected/.test(c.textContent));
+  const saveBtn = findSaveBtn(runner.panel);
   assert.ok(saveBtn, "save button present");
   await saveBtn.onclick();
 
   assert.ok(messages.some((m) => m[0] === "archivr:getRecords" && m[1].length === 2));
   assert.ok(messages.some((m) => m[0] === "archivr:download" && m[1].filename.endsWith(".zip")));
+});
+
+test("unchecking select-all stays unchecked across refresh", async () => {
+  const messages = [];
+  const ctx = loadPopup(makeSandbox(messages));
+  stubSteps(ctx);
+  const runner = makePanelRunner(ctx);
+  await runner.refresh();
+
+  const selectAll = findSelectAllInput(runner.panel);
+  assert.equal(selectAll.checked, true, "select-all starts checked");
+
+  selectAll.checked = false;
+  selectAll.onchange({ target: selectAll });
+  await runner.lastRefresh;
+
+  assert.equal(findSelectAllInput(runner.panel).checked, false, "select-all stays unchecked after refresh");
+  assert.deepEqual(
+    findRowCbs(runner.panel).map((cb) => cb.checked),
+    [false, false],
+    "no rows re-selected after select-all uncheck"
+  );
+});
+
+test("refresh after toggling a row off keeps that row deselected", async () => {
+  const messages = [];
+  const ctx = loadPopup(makeSandbox(messages));
+  stubSteps(ctx);
+  const runner = makePanelRunner(ctx);
+  await runner.refresh();
+
+  const rowCbs = findRowCbs(runner.panel);
+  assert.equal(rowCbs.length, 2, "two row checkboxes rendered");
+  rowCbs[1].checked = false;
+  rowCbs[1].onchange();
+  await runner.lastRefresh;
+
+  assert.deepEqual(
+    findRowCbs(runner.panel).map((cb) => cb.checked),
+    [true, false],
+    "toggled-off row stays deselected across refresh"
+  );
+  assert.equal(findSelectAllInput(runner.panel).checked, false, "select-all reflects partial selection");
+});
+
+test("deselected rows are excluded from getRecords ids on save", async () => {
+  const messages = [];
+  const ctx = loadPopup(makeSandbox(messages));
+  stubSteps(ctx);
+  const runner = makePanelRunner(ctx);
+  await runner.refresh();
+
+  const rowCbs = findRowCbs(runner.panel);
+  rowCbs[1].checked = false;
+  rowCbs[1].onchange();
+  await runner.lastRefresh;
+
+  const saveBtn = findSaveBtn(runner.panel);
+  assert.ok(saveBtn, "save button present");
+  await saveBtn.onclick();
+
+  const getRecords = messages.find((m) => m[0] === "archivr:getRecords");
+  assert.ok(getRecords, "getRecords sent");
+  assert.deepEqual(Array.from(getRecords[1]), [1], "only the still-selected id is requested");
 });

@@ -588,6 +588,11 @@ if (isPopup) {
       globalThis.Plugins.set(plugin.id, plugin);
     };
 
+  // Popup-session selection state. Lives here (the popup-only block) so it
+  // survives re-renders via refresh() while staying inert in the background.
+  const selection = new Set();
+  let selectionInitialized = false;
+
   globalThis.registerPlugin({
     id: "archivr",
     name: "Archiver",
@@ -622,13 +627,22 @@ if (isPopup) {
         return;
       }
 
-      const selection = new Set(list.map((r) => r.id));
+      // Keep the session selection: drop ids for captures that were removed
+      // (store cleared/evicted) and, on the very first render of a popup
+      // session, default to every capture selected. Never re-select after a
+      // user deselects — an empty selection must stay empty across refresh().
+      for (const id of Array.from(selection)) if (!list.some((r) => r.id === id)) selection.delete(id);
+
+      if (!selectionInitialized) {
+        list.forEach((r) => selection.add(r.id));
+        selectionInitialized = true;
+      }
 
       const selectAll = document.createElement("label");
       selectAll.className = "checkbox-label";
       const selectAllInput = document.createElement("input");
       selectAllInput.type = "checkbox";
-      selectAllInput.checked = true;
+      selectAllInput.checked = selection.size === list.length;
       selectAllInput.onchange = (e) => {
         selection.clear();
         if (e.target.checked) list.forEach((r) => selection.add(r.id));
@@ -647,6 +661,7 @@ if (isPopup) {
         cb.onchange = () => {
           if (cb.checked) selection.add(r.id);
           else selection.delete(r.id);
+          refresh();
         };
         row.appendChild(cb);
         const text = document.createElement("span");
