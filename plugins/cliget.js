@@ -1,7 +1,7 @@
 "use strict";
 
 const ext = typeof browser !== "undefined" ? browser : chrome;
-const extAction = ext.action || ext.browserAction;
+const extAction = ext.action;
 
 // Self-registration setup
 globalThis.Plugins = globalThis.Plugins || new Map();
@@ -118,7 +118,7 @@ function generateCurl(url, method, headers, payload, filename, options) {
     if (headerName === "content-type") {
       contentType = header.value.toLowerCase();
       let v = header.value;
-      if (v.startsWith("multipart/form-data;")) v = v.slice(0, 19);
+      if (v.startsWith("multipart/form-data;")) v = v.slice(0, 20);
       let h = esc(`${header.name}: ${v}`, options.doubleQuotes);
       parts.push(`--header ${h}`);
     } else if (headerName === "content-length") {
@@ -177,7 +177,7 @@ function generateWget(url, method, headers, payload, filename, options) {
     if (headerName === "content-type") {
       contentType = header.value.toLowerCase();
       let v = header.value;
-      if (v.startsWith("multipart/form-data;")) v = v.slice(0, 19);
+      if (v.startsWith("multipart/form-data;")) v = v.slice(0, 20);
       let h = esc(`${header.name}: ${v}`, options.doubleQuotes);
       parts.push(`--header ${h}`);
     } else if (headerName === "content-length") {
@@ -299,17 +299,7 @@ if (_isBackground) {
     if (details.tabId >= 0) {
       const now = Date.now();
 
-      let payload = details.requestBody;
-      if (payload && payload.raw)
-        payload = {
-          formData: payload.formData,
-          raw: payload.raw.map((part) => {
-            if (part.bytes && part.bytes.byteLength > 65536)
-              return { bytes: part.bytes.slice(0, 65536), truncated: true };
-
-            return part;
-          })
-        };
+      const payload = details.requestBody;
 
       currentRequests.set(details.requestId, {
         id: details.requestId,
@@ -451,8 +441,6 @@ if (_isBackground) {
 globalThis.registerPlugin({
   id: "cliget",
   name: "cliget",
-  shellEscaping: true,
-  capturesDownloads: true,
   defaultOptions: {
     cliTool: "curl",
     curlOptions: "",
@@ -492,7 +480,6 @@ globalThis.registerPlugin({
       dependsOn: { key: "cliTool", value: "aria2" }
     }
   ],
-  generate: generate,
   render: async function (panel, context) {
     const { refresh } = context;
 
@@ -544,7 +531,7 @@ globalThis.registerPlugin({
     const options = Object.assign({}, defaults, storedOptions);
 
     const request = currentDownloads.find((r) => r.id === selectedDownloadId);
-    const activeOptions = Object.assign({}, options, { command: "cliget" });
+    const activeOptions = Object.assign({}, options);
     const cmd = request ? await ext.runtime.sendMessage(["cliget:generateCommand", request, activeOptions]) : "";
 
     // Create Download Picker Container

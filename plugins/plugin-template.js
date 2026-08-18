@@ -37,8 +37,6 @@
 "use strict";
 
 const ext = typeof browser !== "undefined" ? browser : chrome;
-// eslint-disable-next-line no-unused-vars
-const extAction = ext.action || ext.browserAction;
 
 // Self-registration bootstrap (safe to duplicate across plugin files)
 globalThis.Plugins = globalThis.Plugins || new Map();

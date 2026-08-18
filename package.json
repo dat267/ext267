@@ -4,6 +4,7 @@
   "description": "A multipurpose, extensible browser toolkit with download capture and network activity recording.",
   "scripts": {
     "lint": "web-ext lint",
+    "test": "node --test",
     "dev": "web-ext run",
     "build": "node build-package.js",
     "version": "node version-sync.js && git add manifest.json",

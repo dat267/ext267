@@ -111,7 +111,7 @@ All styling resides in [popup.css](file:///home/dat/repos/ext267/popup.css) usin
   * Interactive states must define transitions for hover/active states with subtle scaling or border highlights.
 
 ### CSS Animations
-* Add animations in [popup.css](file:///home/dat/repos/ext267/popup.css) as `@keyframes` blocks. Use dedicated utility classes (e.g., `.recording-indicator`) rather than inline animation styles.
+* Add animations in [popup.css](file:///home/dat/repos/ext267/popup.css) as `@keyframes` blocks. Use dedicated utility classes rather than inline animation styles.
 
 ---
 

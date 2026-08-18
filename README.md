@@ -39,7 +39,8 @@ Full architecture details are in [AGENTS.md](AGENTS.md).
 
 ```bash
 npm ci
-npm run lint     # web-ext lint + ESLint
+npm test     # unit tests (node:test)
+npm run lint # web-ext lint + ESLint
 npm run build    # package signed XPI
 ```
 
