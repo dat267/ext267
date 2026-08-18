@@ -51,12 +51,11 @@ if (isContentScript) {
     const settings = await ext.storage.local.get("archivr.enabled").catch(() => ({}));
     if (!settings["archivr.enabled"]) return;
 
-    const shot = extractSnapshot(document);
-    if (!shouldCapture({ protocol: location.protocol, title: shot.title, html: shot.html })) return;
-
     let lastSent = 0;
     const send = () => {
       if (Date.now() - lastSent < 5000) return;
+      const shot = extractSnapshot(document);
+      if (!shouldCapture({ protocol: location.protocol, title: shot.title, html: shot.html })) return;
       lastSent = Date.now();
       ext.runtime.sendMessage(["archivr:capture", shot]);
     };

@@ -60,6 +60,77 @@ test("extractSnapshot returns the required capture payload", () => {
   assert.equal(typeof shot.ts, "number");
 });
 
+function loadSpaContent() {
+  const sent = [];
+  const listeners = {};
+  let now = 10000;
+  const windowStub = {
+    addEventListener(type, fn) {
+      listeners[type] = fn;
+    },
+    removeEventListener(type) {
+      delete listeners[type];
+    }
+  };
+  const doc = makeDoc({
+    baseURI: "https://example.com/route-a",
+    title: "Route A",
+    documentElement: { outerHTML: "<html><body>route a</body></html>" }
+  });
+  const ctx = loadContent({
+    window: windowStub,
+    location: { protocol: "https:" },
+    document: Object.assign(doc, { readyState: "complete" }),
+    Date: { now: () => now },
+    browser: {
+      storage: { local: { get: async () => ({ "archivr.enabled": true }) } },
+      runtime: { sendMessage: (msg) => sent.push(msg) }
+    }
+  });
+  return {
+    ctx,
+    sent,
+    listeners,
+    doc,
+    advanceNow: (ms) => {
+      now += ms;
+    }
+  };
+}
+
+test("SPA re-capture re-extracts the live page snapshot", async () => {
+  const { sent, listeners, doc, advanceNow } = loadSpaContent();
+  await tick(0);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][1].baseURI, "https://example.com/route-a");
+  assert.equal(sent[0][1].html, "<html><body>route a</body></html>");
+
+  advanceNow(6000);
+  doc.baseURI = "https://example.com/route-b";
+  doc.title = "Route B";
+  doc.documentElement.outerHTML = "<html><body>route b</body></html>";
+  listeners.popstate();
+  await tick(450);
+
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1][1].baseURI, "https://example.com/route-b");
+  assert.equal(sent[1][1].html, "<html><body>route b</body></html>");
+  assert.ok(sent[1][1].ts > sent[0][1].ts);
+});
+
+test("SPA re-capture drops pages that no longer pass shouldCapture", async () => {
+  const { sent, listeners, doc, advanceNow } = loadSpaContent();
+  await tick(0);
+  assert.equal(sent.length, 1);
+
+  advanceNow(6000);
+  doc.documentElement.outerHTML = "<html><body></body></html>";
+  listeners.popstate();
+  await tick(450);
+
+  assert.equal(sent.length, 1);
+});
+
 test("armSpaCapture re-arms on events and disarms cleanly", async () => {
   const ctx = loadContent({});
   const listeners = {};
