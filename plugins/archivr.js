@@ -75,7 +75,6 @@ function sniffMime(url, contentType) {
   return map[ext] || "application/octet-stream";
 }
 
-// eslint-disable-next-line no-unused-vars
 function formatSize(bytes) {
   let val = Number(bytes) || 0;
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -87,7 +86,6 @@ function formatSize(bytes) {
   return `${val.toFixed(1)} ${units[i]}`;
 }
 
-// eslint-disable-next-line no-unused-vars
 function formatRelativeTime(ts) {
   const diff = Date.now() - ts;
   if (diff < 60000) return "just now";
@@ -336,7 +334,6 @@ function archiveFilename() {
   );
 }
 
-// eslint-disable-next-line no-unused-vars
 function bytesToBase64(bytes) {
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
@@ -344,7 +341,16 @@ function bytesToBase64(bytes) {
   return btoa(bin);
 }
 
-// eslint-disable-next-line no-unused-vars
+async function defaultFetcher(url) {
+  const res = await fetch(url);
+  return {
+    ok: res.ok,
+    headers: { get: (name) => res.headers.get(name) },
+    text: () => res.text(),
+    arrayBuffer: () => res.arrayBuffer()
+  };
+}
+
 async function buildArchive(entries, fetcher, opts = {}) {
   const dirName = opts.dirName || archiveFilename().replace(/\.zip$/, "");
   const serialize = opts.serializePage || serializePage;
@@ -587,11 +593,114 @@ if (isPopup) {
     name: "Archiver",
     defaultOptions: { enabled: false },
     render: async function (panel, context) {
-      void context;
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "Archivr is not implemented yet.";
-      panel.appendChild(empty);
+      const { refresh } = context;
+      if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text: "" });
+      ext.runtime.sendMessage(["archivr:clearBadge"]).catch(() => {});
+
+      const settings = await ext.storage.local.get(["archivr.enabled"]).catch(() => ({}));
+      const enabled = !!settings["archivr.enabled"];
+
+      const toggleLabel = document.createElement("label");
+      toggleLabel.className = "checkbox-label";
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.checked = enabled;
+      toggle.onchange = async (e) => {
+        await ext.storage.local.set({ "archivr.enabled": e.target.checked }).catch(() => {});
+        refresh();
+      };
+      toggleLabel.appendChild(toggle);
+      toggleLabel.appendChild(document.createTextNode("Auto-capture pages this session"));
+      panel.appendChild(toggleLabel);
+
+      const list = (await ext.runtime.sendMessage(["archivr:list"]).catch(() => null)) || [];
+      if (list.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = "No pages captured yet. Enable Auto-capture, browse, then save them here.";
+        panel.appendChild(empty);
+        return;
+      }
+
+      const selection = new Set(list.map((r) => r.id));
+
+      const selectAll = document.createElement("label");
+      selectAll.className = "checkbox-label";
+      const selectAllInput = document.createElement("input");
+      selectAllInput.type = "checkbox";
+      selectAllInput.checked = true;
+      selectAllInput.onchange = (e) => {
+        selection.clear();
+        if (e.target.checked) list.forEach((r) => selection.add(r.id));
+        refresh();
+      };
+      selectAll.appendChild(selectAllInput);
+      selectAll.appendChild(document.createTextNode("Select all"));
+      panel.appendChild(selectAll);
+
+      for (const r of list) {
+        const row = document.createElement("label");
+        row.className = "checkbox-label";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = selection.has(r.id);
+        cb.onchange = () => {
+          if (cb.checked) selection.add(r.id);
+          else selection.delete(r.id);
+        };
+        row.appendChild(cb);
+        const text = document.createElement("span");
+        let host = r.url;
+        try {
+          host = new URL(r.url).host;
+        } catch {
+          // keep raw url
+        }
+        text.textContent = `${r.title || "(untitled)"} — ${host} · ${formatSize(r.size)} · ${formatRelativeTime(r.ts)}`;
+        row.appendChild(text);
+        panel.appendChild(row);
+      }
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "btn btn-blue btn-full";
+      saveBtn.textContent = "Save selected as ZIP";
+      saveBtn.onclick = async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Archiving…";
+        try {
+          const ids = Array.from(selection);
+          if (ids.length === 0) return;
+          const records = (await ext.runtime.sendMessage(["archivr:getRecords", ids]).catch(() => null)) || [];
+          const bytes = await buildArchive(
+            records.filter((r) => r && r.html),
+            defaultFetcher,
+            {}
+          );
+          await ext.runtime.sendMessage([
+            "archivr:download",
+            { bytesBase64: bytesToBase64(bytes), filename: archiveFilename() }
+          ]);
+          saveBtn.textContent = "Saved!";
+        } catch (err) {
+          console.error("[archivr] save failed:", err);
+          saveBtn.textContent = "Save failed";
+        } finally {
+          setTimeout(() => {
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Save selected as ZIP";
+          }, 2000);
+        }
+      };
+      panel.appendChild(saveBtn);
+
+      const clearBtn = document.createElement("button");
+      clearBtn.className = "btn btn-red btn-full";
+      clearBtn.textContent = "Clear session";
+      clearBtn.onclick = async () => {
+        await ext.runtime.sendMessage(["archivr:clear"]).catch(() => {});
+        refresh();
+      };
+      panel.appendChild(clearBtn);
     }
   });
 }
