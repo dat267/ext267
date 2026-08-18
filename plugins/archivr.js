@@ -132,7 +132,7 @@ if (isBackground) {
         if (newest && newest.url === rec.url && Math.abs(newest.ts - rec.ts) < DEDUPE_MS) return null;
 
         const id = ++seq;
-        const full = Object.assign({ id, ts: rec.ts || Date.now() }, rec);
+        const full = Object.assign({ id, ts: rec.ts || Date.now() }, rec, { size: (rec.html || "").length });
         records.set(id, full);
         ordered.unshift(id);
         if (ordered.length > MAX_LIST) {
@@ -182,11 +182,12 @@ if (isBackground) {
 
     return {
       async add(rec) {
-        const id = await inMemory.add(rec);
+        const sized = Object.assign({}, rec, { size: (rec.html || "").length });
+        const id = await inMemory.add(sized);
         if (id === null) return null;
         const store = (await db()).transaction("captures", "readwrite").objectStore("captures");
         await new Promise((resolve, reject) => {
-          const req = store.add(Object.assign({}, rec, { id, size: (rec.html || "").length }));
+          const req = store.add(Object.assign({}, sized, { id }));
           req.onsuccess = () => resolve(req.result);
           req.onerror = () => reject(req.error);
         });

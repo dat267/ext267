@@ -41,6 +41,8 @@ test("memory store adds, lists newest-first, counts, omits html in list", async 
   const list = await store.list();
   assert.deepEqual([...list.map((r) => r.url)], ["https://a.com/3", "https://a.com/2", "https://a.com/1"]);
   assert.equal(list[0].html, undefined, "list() must omit the html payload");
+  assert.equal(typeof list[0].size, "number", "list() must populate size");
+  assert.equal(list[0].size, "<html></html>".length, "size must equal html.length");
 });
 
 test("memory store dedupes same URL within 5s", async () => {
