@@ -251,7 +251,11 @@ async function inlineCssFromLinks(doc, baseUri, fetcher, state) {
 
 async function inlineImgs(doc, baseUri, fetcher, state) {
   for (const node of doc.querySelectorAll("img[src], img[data-src], video[poster]")) {
-    const src = node.getAttribute("src") || node.getAttribute("data-src");
+    let src = node.getAttribute("src");
+    const dataSrc = node.getAttribute("data-src");
+    // Lazy-loaded images carry a tiny placeholder in src and the real URL in
+    // data-src; when the two differ, prefer the real one for inlining.
+    if (dataSrc && (!src || dataSrc !== src)) src = dataSrc;
     if (src) {
       const abs = absolutizeUrlStr(src, baseUri);
       const dataUrl = await assetToDataUri(abs, fetcher, state);

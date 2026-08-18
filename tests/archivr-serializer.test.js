@@ -274,6 +274,22 @@ test("inlineImgs inlines img[src] and removes data-src wrapper", async () => {
   assert.equal(img.hasAttribute("data-src"), false);
 });
 
+test("inlineImgs prefers data-src over a placeholder src (lazy-load images)", async () => {
+  const doc = fakeDoc();
+  const img = el("img", { src: "https://e.com/placeholder.png", "data-src": "https://e.com/real.png" });
+  doc.body.appendChild(img);
+  const fetcher = makeFetcher({
+    "https://e.com/placeholder.png": { data: "PLACEHOLDER", contentType: "image/png" },
+    "https://e.com/real.png": { data: "REAL", contentType: "image/png" }
+  });
+  await ctx.inlineImgs(doc, "https://e.com/real.png", fetcher, { cache: new Map() });
+  const src = img.getAttribute("src");
+  assert.match(src, /^data:image\/png;base64/, "src becomes a data URI");
+  const decoded = Buffer.from(src.split(",")[1], "base64").toString("binary");
+  assert.equal(decoded, "REAL", "the real image is inlined, not the placeholder");
+  assert.equal(img.hasAttribute("data-src"), false, "data-src wrapper removed");
+});
+
 test("stripScripts removes scripts and on* attributes", () => {
   const doc = fakeDoc();
   const s = el("script", { src: "https://e.com/x.js" });
