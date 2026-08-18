@@ -27,7 +27,6 @@ function uniqueNames(names) {
   });
 }
 
-// eslint-disable-next-line no-unused-vars
 function absolutizeUrlStr(url, base) {
   if (!url || /^(data:|javascript:|mailto:|blob:|about:)/i.test(url)) return url;
   try {
@@ -50,7 +49,6 @@ function extractCssUrls(cssText) {
   return urls;
 }
 
-// eslint-disable-next-line no-unused-vars
 function sniffMime(url, contentType) {
   const ct = String(contentType || "")
     .toLowerCase()
@@ -100,6 +98,183 @@ function formatRelativeTime(ts) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs} hr ago`;
   return `${Math.floor(hrs / 24)} day ago`;
+}
+
+// ---- Page serializer (popup/background path; globalThis.parseSrcset and
+// ---- globalThis.UglifyCSS are referenced lazily, never at module top level) ---
+
+function parseHtml(html, parser) {
+  return parser.parseFromString(html, "text/html").documentElement;
+}
+
+function absolutizeStyleUrls(styleText, baseUri) {
+  return styleText.replace(/\burl\(\s*(?:(["'])(.*?)\1|([^)'"\s]+))\s*\)/g, (full, _q, quoted, unquoted) => {
+    const url = (quoted || unquoted || "").trim();
+    return url && !/^data:/i.test(url) ? `url("${absolutizeUrlStr(url, baseUri)}")` : full;
+  });
+}
+
+function absolutizeHtml(doc, baseUri) {
+  for (const name of ["src", "href", "poster", "data-src"])
+    for (const node of doc.querySelectorAll(`[${name}]`)) {
+      const value = node.getAttribute(name);
+      if (value) node.setAttribute(name, absolutizeUrlStr(value, baseUri));
+    }
+
+  for (const node of doc.querySelectorAll("[style]")) {
+    const style = node.getAttribute("style");
+    if (style) node.setAttribute("style", absolutizeStyleUrls(style, baseUri));
+  }
+  return doc;
+}
+
+async function rewriteSrcsets(doc, baseUri, fetcher, state) {
+  for (const node of doc.querySelectorAll("[srcset]")) {
+    const raw = node.getAttribute("srcset");
+    if (!raw) continue;
+    try {
+      const parts = globalThis.parseSrcset(raw);
+      const rebuilt = [];
+      for (const p of parts) {
+        const abs = absolutizeUrlStr(p.url, baseUri);
+        const dataUrl = await assetToDataUri(abs, fetcher, state);
+        let desc = "";
+        if (p.w) desc = `${p.w}w`;
+        else if (p.h) desc = `${p.h}h`;
+        else if (p.d) desc = `${p.d}x`;
+        rebuilt.push(dataUrl + (desc ? " " + desc : ""));
+      }
+      node.setAttribute("srcset", rebuilt.join(", "));
+    } catch {
+      // leave the original srcset untouched on parse failure
+    }
+  }
+  return doc;
+}
+
+async function fetchText(url, fetcher, state) {
+  void state; // signature parity with the other fetcher helpers
+  const res = await fetcher(url).catch(() => null);
+  if (!res || !res.ok) return null;
+  return res.text().catch(() => null);
+}
+
+async function assetToDataUri(url, fetcher, state) {
+  if (state.cache.has(url)) return state.cache.get(url);
+  let result = url;
+  const res = await fetcher(url).catch(() => null);
+  if (res && res.ok && typeof res.arrayBuffer === "function") {
+    const buf = await res.arrayBuffer().catch(() => null);
+    if (buf) {
+      const contentType = res.headers ? res.headers.get("content-type") || "" : "";
+      const mime = sniffMime(url, contentType);
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000)
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+
+      result = `data:${mime};base64,${btoa(bin)}`;
+    }
+  }
+  state.cache.set(url, result);
+  return result;
+}
+
+async function rewriteCssUrlsAsync(cssText, cssUrl, fetcher, state) {
+  const re = /\burl\(\s*(?:(["'])(.*?)\1|([^)'"\s]+))\s*\)/g;
+  const pieces = [];
+  let lastIndex = 0;
+  let m;
+  while ((m = re.exec(cssText)) !== null) {
+    pieces.push(cssText.slice(lastIndex, m.index));
+    const url = (m[2] || m[3] || "").trim();
+    if (url && !/^data:/i.test(url)) {
+      const abs = absolutizeUrlStr(url, cssUrl);
+      const dataUrl = await assetToDataUri(abs, fetcher, state);
+      pieces.push(`url("${dataUrl}")`);
+    } else {
+      pieces.push(m[0]);
+    }
+    lastIndex = re.lastIndex;
+  }
+  pieces.push(cssText.slice(lastIndex));
+  return pieces.join("");
+}
+
+async function inlineCssText(cssText, cssUrl, fetcher, state) {
+  const impRe = /@import\s+(?:url\(\s*)?(["']?)([^"')\s]+)\1\s*\)?[^;]*;/gi;
+  const parts = [];
+  let lastIndex = 0;
+  let m;
+  while ((m = impRe.exec(cssText)) !== null) {
+    parts.push(cssText.slice(lastIndex, m.index));
+    const abs = absolutizeUrlStr(m[2], cssUrl);
+    const sub = await fetchText(abs, fetcher, state);
+    if (sub !== null) parts.push(await inlineCssText(sub, abs, fetcher, state));
+    lastIndex = impRe.lastIndex;
+  }
+  parts.push(cssText.slice(lastIndex));
+  return rewriteCssUrlsAsync(parts.join(""), cssUrl, fetcher, state);
+}
+
+async function inlineCssFromLinks(doc, baseUri, fetcher, state) {
+  for (const link of doc.querySelectorAll('link[rel="stylesheet"]')) {
+    const href = link.getAttribute("href");
+    if (!href) continue;
+    const cssUrl = absolutizeUrlStr(href, baseUri);
+    const text = await fetchText(cssUrl, fetcher, state);
+    if (text === null) continue;
+    const inlined = await inlineCssText(text, cssUrl, fetcher, state);
+    const style = doc.createElement("style");
+    style.textContent = globalThis.UglifyCSS.processString(inlined);
+    link.parentNode.insertBefore(style, link);
+    link.remove();
+  }
+  return doc;
+}
+
+async function inlineImgs(doc, baseUri, fetcher, state) {
+  for (const node of doc.querySelectorAll("img[src], img[data-src], video[poster]")) {
+    const src = node.getAttribute("src") || node.getAttribute("data-src");
+    if (src) {
+      const abs = absolutizeUrlStr(src, baseUri);
+      const dataUrl = await assetToDataUri(abs, fetcher, state);
+      if (dataUrl !== abs) node.setAttribute("src", dataUrl);
+      node.removeAttribute("data-src");
+    }
+  }
+  return doc;
+}
+
+function stripScripts(doc) {
+  for (const node of doc.querySelectorAll("script, iframe, object, embed")) node.remove();
+  for (const node of doc.querySelectorAll("*")) {
+    for (const attr of Array.from(node.attributes)) if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+
+    if (node.hasAttribute("href") && /^\s*javascript:/i.test(node.getAttribute("href") || ""))
+      node.removeAttribute("href");
+  }
+  return doc;
+}
+
+function toHtml(doc) {
+  return "<!DOCTYPE html>\n" + doc.outerHTML;
+}
+
+// eslint-disable-next-line no-unused-vars
+async function serializePage({ html, baseUri }, fetcher) {
+  const doc = parseHtml(html, new DOMParser());
+  const state = { cache: new Map() };
+  absolutizeHtml(doc, baseUri);
+  await rewriteSrcsets(doc, baseUri, fetcher, state);
+  await inlineCssFromLinks(doc, baseUri, fetcher, state);
+  await inlineImgs(doc, baseUri, fetcher, state);
+  stripScripts(doc);
+  const base = doc.createElement("base");
+  base.setAttribute("href", baseUri);
+  const head = doc.querySelector("head") || doc.documentElement;
+  head.insertBefore(base, head.firstChild || null);
+  return toHtml(doc);
 }
 
 const ext = typeof browser !== "undefined" ? browser : chrome;
