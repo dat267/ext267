@@ -509,7 +509,10 @@ if (isBackground) {
     if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text });
   };
 
-  const store = createIdbStore("archivr-captures");
+  const store =
+    globalThis.__archivrTest && globalThis.__archivrTest.store
+      ? globalThis.__archivrTest.store
+      : createIdbStore("archivr-captures");
 
   const handle = async (msg, sendResponse) => {
     const name = msg[0];
