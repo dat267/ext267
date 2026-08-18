@@ -202,15 +202,35 @@ async function rewriteCssUrlsAsync(cssText, cssUrl, fetcher, state) {
 }
 
 async function inlineCssText(cssText, cssUrl, fetcher, state) {
-  const impRe = /@import\s+(?:url\(\s*)?(["']?)([^"')\s]+)\1\s*\)?[^;]*;/gi;
+  if (!state.cssImports) state.cssImports = new Set();
+  const impRe = /@import\s+(?:url\(\s*)?(["']?)([^"')\s]+)\1\s*\)?\s*([^;]*);/gi;
   const parts = [];
   let lastIndex = 0;
   let m;
   while ((m = impRe.exec(cssText)) !== null) {
     parts.push(cssText.slice(lastIndex, m.index));
+    const statement = m[0];
+    const before = cssText.slice(0, m.index);
+    const opens = (before.match(/\/\*/g) || []).length;
+    const closes = (before.match(/\*\//g) || []).length;
+    if (opens > closes) {
+      parts.push(statement);
+      lastIndex = impRe.lastIndex;
+      continue;
+    }
     const abs = absolutizeUrlStr(m[2], cssUrl);
+    if (state.cssImports.has(abs)) {
+      lastIndex = impRe.lastIndex;
+      continue;
+    }
+    state.cssImports.add(abs);
     const sub = await fetchText(abs, fetcher, state);
-    if (sub !== null) parts.push(await inlineCssText(sub, abs, fetcher, state));
+    if (sub !== null) {
+      const subCss = await inlineCssText(sub, abs, fetcher, state);
+      const condition = (m[3] || "").trim();
+      if (condition) parts.push(`@media ${condition} { ${subCss} }`);
+      else parts.push(subCss);
+    }
     lastIndex = impRe.lastIndex;
   }
   parts.push(cssText.slice(lastIndex));
@@ -264,7 +284,7 @@ function toHtml(doc) {
 // eslint-disable-next-line no-unused-vars
 async function serializePage({ html, baseUri }, fetcher) {
   const doc = parseHtml(html, new DOMParser());
-  const state = { cache: new Map() };
+  const state = { cache: new Map(), cssImports: new Set() };
   absolutizeHtml(doc, baseUri);
   await rewriteSrcsets(doc, baseUri, fetcher, state);
   await inlineCssFromLinks(doc, baseUri, fetcher, state);

@@ -215,6 +215,53 @@ test("inlineCssFromLinks recurses into @import", async () => {
   assert.ok(styles[0].textContent.includes("b{color:red}"), "root rules kept");
 });
 
+test("inlineCssText terminates on circular @import", async () => {
+  const fetcher = makeFetcher({
+    "https://e.com/self.css": { data: '@import url("self.css"); a{color:red}', contentType: "text/css" }
+  });
+  const out = await ctx.inlineCssText('@import url("self.css");', "https://e.com/self.css", fetcher, {
+    cache: new Map()
+  });
+  assert.ok(out.includes("a{color:red}"), "rules inlined despite circular import");
+});
+
+test("inlineCssText terminates on mutual @import cycles", async () => {
+  const fetcher = makeFetcher({
+    "https://e.com/a.css": { data: '@import url("b.css"); a{color:red}', contentType: "text/css" },
+    "https://e.com/b.css": { data: '@import url("a.css"); b{color:blue}', contentType: "text/css" }
+  });
+  const out = await ctx.inlineCssText('@import url("a.css");', "https://e.com/a.css", fetcher, {
+    cache: new Map()
+  });
+  assert.ok(out.includes("a{color:red}"), "cycle a->b->a inlines a's rules");
+  assert.ok(out.includes("b{color:blue}"), "cycle a->b->a inlines b's rules");
+});
+
+test("inlineCssText preserves @import media conditions", async () => {
+  const fetcher = makeFetcher({
+    "https://e.com/mobile.css": { data: "b{color:blue}", contentType: "text/css" }
+  });
+  const out = await ctx.inlineCssText(
+    '@import url("mobile.css") screen and (max-width:600px);',
+    "https://e.com/mobile.css",
+    fetcher,
+    { cache: new Map() }
+  );
+  assert.ok(out.includes("@media screen and (max-width:600px)"), "condition preserved via @media wrap");
+  assert.ok(out.includes("b{color:blue}"), "imported rules wrapped");
+});
+
+test("inlineCssText leaves commented-out @import untouched", async () => {
+  const fetcher = makeFetcher({
+    "https://e.com/x.css": { data: "never{appear:true}", contentType: "text/css" }
+  });
+  const out = await ctx.inlineCssText('/* @import url("x.css"); */', "https://e.com/x.css", fetcher, {
+    cache: new Map()
+  });
+  assert.ok(out.includes("@import"), "commented import statement retained");
+  assert.ok(!out.includes("never{appear:true}"), "commented import not inlined");
+});
+
 test("inlineImgs inlines img[src] and removes data-src wrapper", async () => {
   const doc = fakeDoc();
   const img = el("img", { src: "https://e.com/pic.png", "data-src": "https://e.com/pic.png" });
