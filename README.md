@@ -17,6 +17,9 @@ selection as a single ZIP: each page becomes a folder with a self-contained `ind
 inlined, single-file style) and a `page.md` (Markdown) version, plus a `manifest.json` and README.
 Captures are session-only and are wiped on browser restart.
 
+Note: resources are fetched without your session cookies, so login-walled or cross-origin
+cookie-gated assets may not be inlined and will remain as remote references in the saved HTML.
+
 ---
 
 ## Developer Guide

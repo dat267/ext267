@@ -27,6 +27,7 @@
 1. **Save pipeline lives in the popup, not background.** The spec said the save pipeline runs in the background, but Turndown and HTML rewriting need a DOM, which a background worker/page does not have. The popup is open during a save (user clicked Save), has a DOM, and retains `<all_urls>` host permission for resource fetches. The background only stores records and handles messages. Consequence: the vendored libs are loaded in the popup only; `background.scripts` lists just `plugins/archivr.js`.
 2. **parse-css-font dropped.** Its dependency tree (7 packages) makes clean vendoring impractical; a custom `url()` extractor inside CSS text covers `@font-face src` without font-shorthand handling (YAGNI for v1).
 3. **whatwg-mimetype dropped.** Replaced with a ~20-line custom `sniffMime(url, contentType)` helper (data-URI MIME selection).
+4. **IndexedDB-unavailable fallback not implemented (ratified).** The spec promised "IndexedDB unavailable → fall back to storage.local"; this plan did not carry it forward. IndexedDB is available in all target browsers (Firefox 142+, Chrome MV3), so the fallback is intentionally omitted in v1. If IndexedDB is unavailable, captures fail and the failure is logged (the background handler's catch already logs handler errors) — captures are not silently dropped without a trace.
 
 ## File Structure
 

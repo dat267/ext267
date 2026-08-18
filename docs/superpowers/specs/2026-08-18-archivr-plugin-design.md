@@ -211,8 +211,10 @@ Mirrors cliget's render style (DOM creation via `document.createElement`, no inn
 - **Per-resource failure** (CORS, auth-walled assets, dead links): log to console, skip the
   resource, leave the URL as a normal reference. The HTML stays valid; it is just not 100%
   complete (SingleFile behaves this way too).
-- **IndexedDB unavailable**: fall back to `storage.local` (bounded by quota); captures degrade
-  gracefully.
+- **IndexedDB unavailable**: ~~fall back to `storage.local` (bounded by quota); captures degrade
+  gracefully.~~ **Ratified deviation (see plan):** the `storage.local` fallback is intentionally not
+  implemented in v1. IndexedDB is available in all target browsers (Firefox 142+, Chrome MV3); if it
+  is somehow unavailable, captures fail and the background handler logs the error.
 - **Huge pages** (> ~5MB html): still captured; content-script messaging handles large strings via
   structured clone. Serialization of many/large pages may take seconds — the popup shows progress.
 - **Empty selection**: the save action is disabled.
