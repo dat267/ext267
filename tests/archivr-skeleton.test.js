@@ -31,7 +31,7 @@ test("archivr stays inert in background context and registers no plugin", () => 
   assert.equal(ctx.Plugins, undefined);
 });
 
-test("archivr background listener only responds to archivr: messages", () => {
+test("archivr background listener only responds to archivr: messages", async () => {
   let captured;
   const runtime = {
     onMessage: {
@@ -58,6 +58,7 @@ test("archivr background listener only responds to archivr: messages", () => {
   assert.equal(responded, 0);
 
   assert.equal(captured(["archivr:ping"], {}, sendResponse), true);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(responded, 1);
 });
 
