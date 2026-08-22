@@ -175,3 +175,8 @@ For Firefox on Android, trigger the workflow with the `unlisted` channel. The si
 Follow [RELEASE.md](RELEASE.md) before any AMO submission. Two invariants prevent the historical CI failures:
 * **A version is never reused** — AMO consumes a version even on post-upload failures, so never re-push a tag whose release already succeeded; bump first.
 * **The version pre-check runs before signing** — CI calls `tools/amo-version-check.js` (also available as `npm run check:version`) to confirm the manifest version is not already on AMO and that required metadata is present, failing fast with a readable message. Run it locally with your `.env` sourced before tagging.
+
+### Secret Handling
+* Pass all credentials (`AMO_API_KEY`, `AMO_API_SECRET`, …) to tools **only via environment variables or GitHub secrets** — never as command-line arguments (`npm` echoes the full command line; this once leaked a secret into session output).
+* **Whenever a secret value appears in tool output, logs, shell history, a diff, or this session's transcripts — always alert the user immediately and explicitly:** say where it appeared, tell them to rotate it at the provider (e.g. [AMO Developer Hub](https://addons.mozilla.org/developers/addon/api/key/)), and list what needs updating afterwards (GitHub secrets, local `.env`). Never continue silently after an exposure.
+* `.env` is gitignored and must stay mode `600`.
