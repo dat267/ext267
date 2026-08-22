@@ -34,6 +34,7 @@ export default [
     files: [
       "build-package.js",
       "version-sync.js",
+      "tools/**/*.js",
       "tests/**/*.test.js"
     ],
     languageOptions: {

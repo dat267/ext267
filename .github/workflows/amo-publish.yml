@@ -36,11 +36,19 @@ jobs:
       - name: Run Linter
         run: npm run lint
 
+      - name: Check AMO Version Availability
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          CHANNEL: ${{ github.event.inputs.channel || 'unlisted' }}
+        run: node tools/amo-version-check.js --channel "$CHANNEL"
+
       - name: Build and Sign Extension
         env:
           AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
           AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
-          # Default to 'listed' if triggered by a tag push, or use user input on manual dispatch
+          # Tag pushes get no dispatch input, so this falls back to 'unlisted'
+          # (self-distribution, no store review). Manual dispatch picks listed/unlisted.
           CHANNEL: ${{ github.event.inputs.channel || 'unlisted' }}
         run: |
           if [ -z "$AMO_API_KEY" ] || [ -z "$AMO_API_SECRET" ]; then

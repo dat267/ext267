@@ -170,3 +170,8 @@ For the pipeline to work, configure the following **Repository Secrets** in your
 
 ### Android Installation
 For Firefox on Android, trigger the workflow with the `unlisted` channel. The signed XPI from the artifacts can be side-loaded via `Settings → Install extension from file` (enable debug menu: tap the Firefox logo 5 times in `Settings → About Firefox`).
+
+### Releasing (AMO)
+Follow [RELEASE.md](RELEASE.md) before any AMO submission. Two invariants prevent the historical CI failures:
+* **A version is never reused** — AMO consumes a version even on post-upload failures, so never re-push a tag whose release already succeeded; bump first.
+* **The version pre-check runs before signing** — CI calls `tools/amo-version-check.js` (also available as `npm run check:version`) to confirm the manifest version is not already on AMO and that required metadata is present, failing fast with a readable message. Run it locally with your `.env` sourced before tagging.

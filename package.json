@@ -5,6 +5,7 @@
   "scripts": {
     "lint": "web-ext lint",
     "test": "node --test",
+    "check:version": "node tools/amo-version-check.js",
     "dev": "web-ext run",
     "build": "node build-package.js",
     "version": "node version-sync.js && git add manifest.json",
