@@ -279,7 +279,12 @@ if (_isBackground) {
     if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text: "" });
   };
 
-  const saveToDownloads = async (request) => {
+  // Serialize storage read-modify-write saves. Parallel request completions
+  // (e.g. several downloads finishing at once) must not clobber each other's
+  // writes or miscount the badge, so every save runs through one queue.
+  let saveQueue = Promise.resolve();
+
+  const saveOneDownload = async (request) => {
     let downloads = await getDownloads();
     if (downloads.some((d) => d.url === request.url && Math.abs(d.timestamp - request.timestamp) < 5000)) return;
 
@@ -288,11 +293,18 @@ if (_isBackground) {
     await saveDownloads(downloads);
     await ext.storage.local.set({ selectedDownloadId: request.id });
 
-    if (extAction && extAction.getBadgeText)
-      extAction.getBadgeText({}).then((txt) => {
-        let num = parseInt(txt, 10) || 0;
-        extAction.setBadgeText({ text: `${num + 1}` });
-      });
+    if (extAction && extAction.getBadgeText) {
+      const txt = await extAction.getBadgeText({});
+      const num = parseInt(txt, 10) || 0;
+      extAction.setBadgeText({ text: `${num + 1}` });
+    }
+  };
+
+  const saveToDownloads = (request) => {
+    const run = saveQueue.then(() => saveOneDownload(request));
+    // Keep the chain alive even if one save rejects.
+    saveQueue = run.catch(() => {});
+    return run;
   };
 
   const beforeRequestCallback = (details) => {
