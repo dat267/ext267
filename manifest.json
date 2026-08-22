@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ext267",
   "version": "1.1.0",
-  "description": "A multipurpose, extensible browser toolkit with download capture and network activity recording.",
+  "description": "A multipurpose, extensible browser toolkit. Capture download requests and generate CLI commands for curl, wget, and aria2c.",
   "icons": {
     "48": "icons/ext267.svg",
     "96": "icons/ext267.svg",

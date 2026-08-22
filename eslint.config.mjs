@@ -34,7 +34,6 @@ export default [
     files: [
       "build-package.js",
       "version-sync.js",
-      "tools/vendor-cjs.js",
       "tests/**/*.test.js"
     ],
     languageOptions: {
