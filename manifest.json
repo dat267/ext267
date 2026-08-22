@@ -17,22 +17,9 @@
   "host_permissions": [
     "<all_urls>"
   ],
-  "content_scripts": [
-    {
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ],
-      "js": [
-        "plugins/archivr-content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
   "background": {
     "scripts": [
-      "plugins/cliget.js",
-      "plugins/archivr.js"
+      "plugins/cliget.js"
     ]
   },
   "action": {
