@@ -27,7 +27,8 @@
   }
 }
 
-html, body {
+html,
+body {
   width: 400px;
   min-height: 350px;
   margin: 0;
@@ -40,7 +41,8 @@ html, body {
 }
 
 @media screen and (max-width: 400px) {
-  html, body {
+  html,
+  body {
     width: 100vw;
     min-width: 320px;
   }
@@ -190,7 +192,8 @@ textarea:focus {
 }
 
 /* Custom Select Dropdowns */
-.text-input-label select, .header-select {
+.text-input-label select,
+.header-select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -222,11 +225,13 @@ textarea:focus {
   background-position: right 8px center;
 }
 
-.text-input-label select:hover, .header-select:hover {
+.text-input-label select:hover,
+.header-select:hover {
   background-color: var(--hover-bg);
 }
 
-.text-input-label select:focus, .header-select:focus {
+.text-input-label select:focus,
+.header-select:focus {
   outline: 2px solid var(--accent-color);
   outline-offset: -1px;
 }

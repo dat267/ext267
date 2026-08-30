@@ -5,11 +5,12 @@ A multipurpose, extensible browser toolkit with a plugin-based architecture.
 ## Plugins
 
 ### cliget
+
 Capture download requests from your browser and generate equivalent CLI commands for **curl**, **wget**, and **aria2c**. Emulates the same cookies, user agent, and referrer as your browser session.
 
 Useful for downloading login-protected files (email attachments, private repos, purchased software) to a remote server without downloading locally first.
 
-*Windows users*: Enable the "Escape with double-quotes" option (cmd.exe doesn't support single quotes). Cygwin users can keep the default.
+_Windows users_: Enable the "Escape with double-quotes" option (cmd.exe doesn't support single quotes). Cygwin users can keep the default.
 
 ---
 
@@ -39,9 +40,8 @@ Full architecture details are in [AGENTS.md](AGENTS.md).
 
 ```bash
 npm ci
-npm test     # unit tests (node:test)
-npm run lint # web-ext lint + ESLint
-npm run build    # package signed XPI
+npm run verify  # unit tests + web-ext lint + eslint
+npm run build   # package signed XPI
 ```
 
 ---

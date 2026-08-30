@@ -3,3 +3,14 @@ web-ext-artifacts
 .env
 .worktrees
 .amo-upload-uuid
+
+# Scratch from manual browser probing (Firefox profiles, local fixture output)
+**/e2e-shots/
+tests/.ff*
+tests/.cache
+tests/.config
+tests/dconf
+tests/Downloads
+tests/*.png
+tests/*probe*.html
+tests/popup-*.html

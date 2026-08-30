@@ -4,7 +4,9 @@
   "description": "A multipurpose, extensible browser toolkit. Capture download requests and generate CLI commands for curl, wget, and aria2c.",
   "scripts": {
     "lint": "web-ext lint",
+    "lint:js": "eslint .",
     "test": "node --test",
+    "verify": "npm test && npm run lint && npm run lint:js",
     "check:version": "node tools/amo-version-check.js",
     "dev": "web-ext run",
     "build": "node build-package.js",
@@ -19,5 +21,21 @@
     "globals": "^17.7.0",
     "prettier": "^3.9.6",
     "web-ext": "*"
+  },
+  "webExt": {
+    "ignoreFiles": [
+      "package-lock.json",
+      "AGENTS.md",
+      "README.md",
+      "RELEASE.md",
+      "eslint.config.mjs",
+      "build-package.js",
+      "version-sync.js",
+      "amo-metadata.json",
+      "tests/**",
+      "tools/**",
+      "plugins/plugin-template.js",
+      ".github/**"
+    ]
   }
 }

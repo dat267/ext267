@@ -3,13 +3,13 @@ name: Publish to Mozilla Add-ons (AMO)
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       channel:
-        description: 'Signing channel (listed or unlisted)'
+        description: "Signing channel (listed or unlisted)"
         required: true
-        default: 'unlisted'
+        default: "unlisted"
         type: choice
         options:
           - listed
@@ -27,14 +27,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install Dependencies
         run: npm ci
 
       - name: Run Linter
         run: npm run lint
+
+      - name: Run Unit Tests
+        run: npm test
+
+      - name: Run ESLint
+        run: npx eslint .
 
       - name: Check AMO Version Availability
         env:
@@ -55,7 +61,7 @@ jobs:
             echo "::warning::AMO_API_KEY or AMO_API_SECRET secrets are not configured. Skipping signing step."
             exit 0
           fi
-          
+
           EXTRA_FLAGS=""
           if [ "$CHANNEL" = "listed" ]; then
             echo "Publishing as listed addon to AMO store..."

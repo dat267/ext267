@@ -7,11 +7,11 @@ version AMO had already claimed).
 ## Hard rules
 
 1. **Never reuse a version number.** AMO rejects a version that already exists
-   on the add-on — it is *consumed* even by submissions that failed *after*
+   on the add-on — it is _consumed_ even by submissions that failed _after_
    upload. That means:
    - Never re-push a git tag whose release already succeeded (each `v*` tag
      push re-triggers CI, which will then fail on the duplicate version).
-   - If a tag push failed *before* upload, re-running is fine — only a
+   - If a tag push failed _before_ upload, re-running is fine — only a
      successful (or post-upload) submission consumes the version.
 2. **Submit a version that is strictly newer** than everything AMO has,
    including in-tree versions you never shipped.
@@ -69,13 +69,13 @@ channel (`npm run check:version -- --channel listed` validates).
 
 ## Troubleshooting
 
-| CI symptom | Meaning | Fix |
-|---|---|---|
-| Check step fails: *"version … is ALREADY on AMO"* | Version was consumed (e.g. re-pushed tag or manual upload) | Bump the version, create a NEW tag, push again |
-| Check step fails about `categories`/`license` | Metadata incomplete for the chosen channel | Add the fields to `amo-metadata.json` (see `--channel listed` validation) |
-| Sign step: `401`/`403` from AMO | API key invalid, expired, or revoked | Rotate at [AMO Developer Hub → API keys](https://addons.mozilla.org/developers/addon/api/key/); update the GitHub secret `AMO_API_SECRET` and local `.env` |
-| Warning *"secrets are not configured. Skipping signing step"* | `AMO_API_KEY`/`AMO_API_SECRET` GitHub secrets unset | Add them in repo Settings → Secrets and variables → Actions |
-| Sign step fails with a version error despite the check passing | Race between check and upload | Re-run the workflow (same tag); if it persists, bump the version |
+| CI symptom                                                     | Meaning                                                    | Fix                                                                                                                                                        |
+| -------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Check step fails: _"version … is ALREADY on AMO"_              | Version was consumed (e.g. re-pushed tag or manual upload) | Bump the version, create a NEW tag, push again                                                                                                             |
+| Check step fails about `categories`/`license`                  | Metadata incomplete for the chosen channel                 | Add the fields to `amo-metadata.json` (see `--channel listed` validation)                                                                                  |
+| Sign step: `401`/`403` from AMO                                | API key invalid, expired, or revoked                       | Rotate at [AMO Developer Hub → API keys](https://addons.mozilla.org/developers/addon/api/key/); update the GitHub secret `AMO_API_SECRET` and local `.env` |
+| Warning _"secrets are not configured. Skipping signing step"_  | `AMO_API_KEY`/`AMO_API_SECRET` GitHub secrets unset        | Add them in repo Settings → Secrets and variables → Actions                                                                                                |
+| Sign step fails with a version error despite the check passing | Race between check and upload                              | Re-run the workflow (same tag); if it persists, bump the version                                                                                           |
 
 ## Security notes
 

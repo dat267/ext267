@@ -5,12 +5,26 @@ import globals from "globals";
 const commonRules = {
   "no-shadow": ["error", { allow: ["err"] }],
   "prefer-arrow-callback": "error",
-  "curly": ["error", "multi", "consistent"],
+  curly: ["error", "multi", "consistent"],
   "prettier/prettier": "error"
 };
 
 export default [
-  { ignores: ["**/node_modules/", "**/web-ext-artifacts/", "eslint.config.mjs"] },
+  {
+    ignores: [
+      "**/node_modules/",
+      "**/web-ext-artifacts/",
+      "eslint.config.mjs",
+      // Scratch artifacts from manual browser probing — not extension source.
+      "tests/*.png",
+      "tests/*.html",
+      "tests/.ff*",
+      "tests/.cache",
+      "tests/.config",
+      "tests/dconf/**",
+      "tests/Downloads/**"
+    ]
+  },
 
   // Recommended rules for all JS files
   js.configs.recommended,
@@ -31,12 +45,7 @@ export default [
 
   // Node.js build scripts and unit tests override globals
   {
-    files: [
-      "build-package.js",
-      "version-sync.js",
-      "tools/**/*.js",
-      "tests/**/*.test.js"
-    ],
+    files: ["build-package.js", "version-sync.js", "tools/**/*.js", "tests/**/*.test.js"],
     languageOptions: {
       ecmaVersion: 2022,
       globals: {
