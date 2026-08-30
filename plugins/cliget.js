@@ -393,6 +393,20 @@ if (_isBackground) {
 
   ext.webRequest.onResponseStarted.addListener(responseStartedCallback, filter, ["responseHeaders"]);
 
+  // Free pending entries on redirect (no onResponseStarted fires for the
+  // original request) and on error (aborted / failed requests).
+  ext.webRequest.onBeforeRedirect.addListener(
+    (details) => {
+      currentRequests.delete(details.requestId);
+    },
+    filter,
+    ["responseHeaders"]
+  );
+
+  ext.webRequest.onErrorOccurred.addListener((details) => {
+    currentRequests.delete(details.requestId);
+  }, filter);
+
   if (extAction && extAction.setBadgeBackgroundColor) extAction.setBadgeBackgroundColor({ color: "#4a90d9" });
 
   // Handle cliget popup request commands
