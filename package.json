@@ -6,6 +6,7 @@
     "lint": "web-ext lint",
     "lint:js": "eslint .",
     "test": "node --test",
+    "test:e2e": "node tests/e2e/e2e.mjs",
     "verify": "npm test && npm run lint && npm run lint:js",
     "check:version": "node tools/amo-version-check.js",
     "dev": "web-ext run",

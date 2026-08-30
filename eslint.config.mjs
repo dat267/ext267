@@ -45,7 +45,7 @@ export default [
 
   // Node.js build scripts and unit tests override globals
   {
-    files: ["build-package.js", "version-sync.js", "tools/**/*.js", "tests/**/*.test.js"],
+    files: ["build-package.js", "version-sync.js", "tools/**/*.js", "tests/**/*.test.js", "tests/e2e/**/*.mjs"],
     languageOptions: {
       ecmaVersion: 2022,
       globals: {

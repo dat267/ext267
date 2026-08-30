@@ -14,3 +14,9 @@ tests/Downloads
 tests/*.png
 tests/*probe*.html
 tests/popup-*.html
+
+# E2E test outputs (screenshots, downloads, results)
+tests/e2e/shots/
+tests/e2e/dl/
+tests/e2e/gd.log
+tests/e2e/results.json
