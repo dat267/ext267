@@ -255,6 +255,130 @@ function generate(url, method, headers, payload, filename, options) {
 }
 
 // ----------------------------------------------------
+// Download Store (background download state + persistence)
+// ----------------------------------------------------
+// Pure class: storage and action are injected so the booking logic can be
+// unit-tested without a browser. `storage` mimics ext.storage.local (get/
+// set/remove), `action` mimics ext.action (getBadgeText/setBadgeText).
+class DownloadStore {
+  constructor({ storage, action, now = Date.now }) {
+    this.storage = storage;
+    this.action = action;
+    this.now = now;
+    this.pending = new Map();
+    // Serialize storage read-modify-write saves. Parallel request
+    // completions must not clobber each other's writes or miscount the
+    // badge, so every save runs through one queue.
+    this.saveQueue = Promise.resolve();
+  }
+
+  async list() {
+    const res = await this.storage.get("_cliget_downloads");
+    return res._cliget_downloads || [];
+  }
+
+  async saveDownloads(downloads) {
+    await this.storage.set({ _cliget_downloads: downloads });
+  }
+
+  track(details) {
+    this.pending.set(details.requestId, {
+      id: details.requestId,
+      method: details.method,
+      url: details.url,
+      type: details.type,
+      timestamp: this.now(),
+      payload: details.payload
+    });
+    if (this.pending.size > 150) {
+      const oldestKey = this.pending.keys().next().value;
+      this.pending.delete(oldestKey);
+    }
+  }
+
+  setHeaders(details) {
+    const req = this.pending.get(details.requestId);
+    if (req) req.headers = details.requestHeaders;
+  }
+
+  discard(requestId) {
+    this.pending.delete(requestId);
+  }
+
+  async clear() {
+    await this.storage.remove("_cliget_downloads");
+    if (this.action && this.action.setBadgeText) this.action.setBadgeText({ text: "" });
+  }
+
+  // Return true when the response was accepted as a saved download.
+  async onResponseStarted(details) {
+    const request = this.pending.get(details.requestId);
+    if (!request) return false;
+    this.pending.delete(details.requestId);
+
+    let contentType,
+      contentDisposition,
+      size = 0;
+    let filename = "";
+    if (details.responseHeaders)
+      for (const header of details.responseHeaders) {
+        const name = header.name.toLowerCase();
+        if (name === "content-type") {
+          contentType = header.value?.toLowerCase();
+        } else if (name === "content-disposition") {
+          contentDisposition = header.value?.toLowerCase();
+          filename = getFilenameFromContentDisposition(header.value);
+        } else if (name === "content-length") {
+          size = parseInt(header.value || "0", 10);
+        }
+      }
+    if (!filename) filename = getFilenameFromUrl(request.url);
+    request.filename = filename;
+    request.size = size;
+
+    if (details.statusCode !== 200 || details.fromCache) return false;
+    const isAttachment = contentDisposition && contentDisposition.includes("attachment");
+    let isDownload = false;
+    if (isAttachment) isDownload = true;
+    else if (contentType)
+      if (
+        !contentType.includes("text/html") &&
+        !contentType.includes("text/plain") &&
+        !contentType.includes("application/xhtml") &&
+        !contentType.includes("application/xml") &&
+        !contentType.includes("image/")
+      )
+        isDownload = true;
+    if (!isDownload) return false;
+
+    return this.save(request);
+  }
+
+  save(request) {
+    const run = this.saveQueue.then(() => this.saveOne(request));
+    // Keep the chain alive even if one save rejects.
+    this.saveQueue = run.catch(() => {});
+    return run;
+  }
+
+  async saveOne(request) {
+    let downloads = await this.list();
+    if (downloads.some((d) => d.url === request.url && Math.abs(d.timestamp - request.timestamp) < 5000)) return false;
+    downloads.push(request);
+    if (downloads.length > 10) downloads = downloads.slice(-10);
+    await this.saveDownloads(downloads);
+    await this.storage.set({ selectedDownloadId: request.id });
+
+    if (this.action && this.action.getBadgeText) {
+      const txt = await this.action.getBadgeText({});
+      const num = parseInt(txt, 10) || 0;
+      this.action.setBadgeText({ text: `${num + 1}` });
+    }
+    return true;
+  }
+}
+
+// ----------------------------------------------------
 // Isolated Background Execution (Service Worker / Event Page context)
 // Chrome MV3: typeof window === "undefined" (pure service worker)
 // Firefox MV3: background.scripts loads at _generated_background_page.html
@@ -262,150 +386,35 @@ function generate(url, method, headers, payload, filename, options) {
 const _isBackground =
   typeof window === "undefined" || (typeof location !== "undefined" && location.pathname !== "/popup.html");
 if (_isBackground) {
-  const MAX_ITEMS = 10;
-  const currentRequests = new Map();
-
-  const getDownloads = async () => {
-    let res = await ext.storage.local.get("_cliget_downloads");
-    return res._cliget_downloads || [];
-  };
-
-  const saveDownloads = async (downloadsArray) => {
-    await ext.storage.local.set({ _cliget_downloads: downloadsArray });
-  };
-
-  const clearDownloads = async () => {
-    await ext.storage.local.remove("_cliget_downloads");
-    if (extAction && extAction.setBadgeText) extAction.setBadgeText({ text: "" });
-  };
-
-  // Serialize storage read-modify-write saves. Parallel request completions
-  // (e.g. several downloads finishing at once) must not clobber each other's
-  // writes or miscount the badge, so every save runs through one queue.
-  let saveQueue = Promise.resolve();
-
-  const saveOneDownload = async (request) => {
-    let downloads = await getDownloads();
-    if (downloads.some((d) => d.url === request.url && Math.abs(d.timestamp - request.timestamp) < 5000)) return;
-
-    downloads.push(request);
-    if (downloads.length > MAX_ITEMS) downloads = downloads.slice(-MAX_ITEMS);
-    await saveDownloads(downloads);
-    await ext.storage.local.set({ selectedDownloadId: request.id });
-
-    if (extAction && extAction.getBadgeText) {
-      const txt = await extAction.getBadgeText({});
-      const num = parseInt(txt, 10) || 0;
-      extAction.setBadgeText({ text: `${num + 1}` });
-    }
-  };
-
-  const saveToDownloads = (request) => {
-    const run = saveQueue.then(() => saveOneDownload(request));
-    // Keep the chain alive even if one save rejects.
-    saveQueue = run.catch(() => {});
-    return run;
-  };
-
-  const beforeRequestCallback = (details) => {
-    if (details.tabId >= 0) {
-      const now = Date.now();
-
-      const payload = details.requestBody;
-
-      currentRequests.set(details.requestId, {
-        id: details.requestId,
-        method: details.method,
-        url: details.url,
-        type: details.type,
-        timestamp: now,
-        payload: payload
-      });
-
-      if (currentRequests.size > 150) {
-        const oldestKey = currentRequests.keys().next().value;
-        currentRequests.delete(oldestKey);
-      }
-    }
-  };
-
-  const sendHeadersCallback = (details) => {
-    const req = currentRequests.get(details.requestId);
-    if (req) req.headers = details.requestHeaders;
-  };
-
-  const responseStartedCallback = (details) => {
-    const request = currentRequests.get(details.requestId);
-    if (!request) return;
-
-    currentRequests.delete(details.requestId);
-
-    let contentType,
-      contentDisposition,
-      size = 0;
-    let filename = "";
-
-    if (details.responseHeaders)
-      for (let header of details.responseHeaders) {
-        let headerName = header.name.toLowerCase();
-        if (headerName === "content-type") {
-          contentType = header.value?.toLowerCase();
-        } else if (headerName === "content-disposition") {
-          contentDisposition = header.value?.toLowerCase();
-          filename = getFilenameFromContentDisposition(header.value);
-        } else if (headerName === "content-length") {
-          size = parseInt(header.value || "0", 10);
-        }
-      }
-
-    if (!filename) filename = getFilenameFromUrl(request.url);
-
-    request.filename = filename;
-    request.size = size;
-
-    if (request.type === "main_frame" || request.type === "sub_frame") {
-      if (details.statusCode !== 200 || details.fromCache) return;
-
-      const isAttachment = contentDisposition && contentDisposition.includes("attachment");
-      let isDownload = false;
-
-      if (isAttachment) isDownload = true;
-      else if (contentType)
-        if (
-          !contentType.includes("text/html") &&
-          !contentType.includes("text/plain") &&
-          !contentType.includes("application/xhtml") &&
-          !contentType.includes("application/xml") &&
-          !contentType.includes("image/")
-        )
-          isDownload = true;
-
-      if (isDownload) saveToDownloads(request);
-    }
-  };
+  // Store = pure background logic (tested in tests/cliget-store.test.js).
+  // ext.storage.local and ext.action match the injected storage/action
+  // interface, so no adapter needed.
+  const store = new DownloadStore({ storage: ext.storage.local, action: extAction });
 
   // Register WebRequest listeners for cliget downloads interception
   const filter = { urls: ["<all_urls>"], types: ["main_frame", "sub_frame"] };
 
-  ext.webRequest.onBeforeRequest.addListener(beforeRequestCallback, filter, ["requestBody"]);
+  ext.webRequest.onBeforeRequest.addListener(
+    (details) => {
+      if (details.tabId >= 0) store.track(details);
+    },
+    filter,
+    ["requestBody"]
+  );
 
-  ext.webRequest.onSendHeaders.addListener(sendHeadersCallback, filter, ["requestHeaders"]);
+  ext.webRequest.onSendHeaders.addListener((details) => store.setHeaders(details), filter, ["requestHeaders"]);
 
-  ext.webRequest.onResponseStarted.addListener(responseStartedCallback, filter, ["responseHeaders"]);
+  ext.webRequest.onResponseStarted.addListener((details) => store.onResponseStarted(details), filter, [
+    "responseHeaders"
+  ]);
 
   // Free pending entries on redirect (no onResponseStarted fires for the
   // original request) and on error (aborted / failed requests).
-  ext.webRequest.onBeforeRedirect.addListener(
-    (details) => {
-      currentRequests.delete(details.requestId);
-    },
-    filter,
-    ["responseHeaders"]
-  );
+  ext.webRequest.onBeforeRedirect.addListener((details) => store.discard(details.requestId), filter, [
+    "responseHeaders"
+  ]);
 
-  ext.webRequest.onErrorOccurred.addListener((details) => {
-    currentRequests.delete(details.requestId);
-  }, filter);
+  ext.webRequest.onErrorOccurred.addListener((details) => store.discard(details.requestId), filter);
 
   if (extAction && extAction.setBadgeBackgroundColor) extAction.setBadgeBackgroundColor({ color: "#4a90d9" });
 
@@ -415,10 +424,10 @@ if (_isBackground) {
     const args = msg.slice(1);
 
     if (name === "cliget:getDownloadList") {
-      getDownloads().then(sendResponse);
+      store.list().then(sendResponse);
       return true;
     } else if (name === "cliget:clear") {
-      clearDownloads().then(sendResponse);
+      store.clear().then(sendResponse);
       return true;
     } else if (name === "cliget:generateCommand") {
       const [requestOrId, options] = args;
@@ -450,7 +459,7 @@ if (_isBackground) {
 
       if (typeof requestOrId === "object" && requestOrId !== null) proceedWithRequest(requestOrId);
       else if (requestOrId)
-        getDownloads().then((downloads) => {
+        store.list().then((downloads) => {
           let request = downloads.find((r) => r.id === requestOrId);
           proceedWithRequest(request);
         });
